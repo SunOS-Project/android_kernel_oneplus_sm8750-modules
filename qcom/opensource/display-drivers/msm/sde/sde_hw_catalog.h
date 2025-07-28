@@ -658,8 +658,8 @@ enum {
  * @SDE_CTL_NO_LAYER_EXT        CTL removal of CTL_LAYER_EXTx registers and addition
  *                              of active bits for pipes and layer mixers
  * @SDE_CTL_CESTA_FLUSH         CTL supports display cesta flush programming
- * @SDE_CTL_HYP_CTL_RESERVE     CTL supports Hypervisor Lockdown
  * @SDE_CTL_REG_DMA             CTL supports REG_DMA block
+ * @SDE_CTL_HYP_CTL_RESERVE     VM resource reservation
  * @SDE_CTL_MAX
  */
 enum {
@@ -674,8 +674,8 @@ enum {
 	SDE_CTL_HW_FENCE_DIR_WRITE,
 	SDE_CTL_NO_LAYER_EXT,
 	SDE_CTL_CESTA_FLUSH,
-	SDE_CTL_HYP_CTL_RESERVE,
 	SDE_CTL_REG_DMA,
+	SDE_CTL_HYP_CTL_RESERVE,
 	SDE_CTL_MAX
 };
 

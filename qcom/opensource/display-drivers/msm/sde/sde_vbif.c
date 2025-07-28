@@ -280,6 +280,99 @@ exit:
 	return ot_lim;
 }
 
+void sde_vbif_set_vbif_counters(struct sde_kms *sde_kms)
+{
+	// Configure vbif counters
+	struct sde_hw_vbif *vbif = NULL;
+	struct sde_hw_mdp *mdp;
+	u32 vbif_idx = VBIF_RT;
+	int i;
+
+	if (!sde_kms) {
+		SDE_ERROR("invalid arguments\n");
+		return;
+	}
+	mdp = sde_kms->hw_mdp;
+
+	for (i = 0; i < ARRAY_SIZE(sde_kms->hw_vbif); i++) {
+		if (sde_kms->hw_vbif[i] &&
+				sde_kms->hw_vbif[i]->idx == vbif_idx)
+			vbif = sde_kms->hw_vbif[i];
+	}
+
+	/* Configure the vbif counters select value to enable */
+
+	// Counter 0: Select: 16 - AXI0_READ_REQUESTS_TOTAL
+	vbif->ops.select_dbg_counter(vbif, 0, 16);
+	// Counter 1: Select: 132 - AXI0_ACC_RD_LATENCY_FIRST
+	vbif->ops.select_dbg_counter(vbif, 1, 132);
+	// Counter 2: Select: 17 - AXI1_READ_REQUESTS_TOTAL
+	vbif->ops.select_dbg_counter(vbif, 2, 17);
+	// Counter 3: Select: 133 - AXI1_ACC_RD_LATENCY_FIRST
+	vbif->ops.select_dbg_counter(vbif, 3, 133);
+
+	/* Enable vbif counters */
+
+	vbif->ops.enable_dbg_counter(vbif, 0, true);
+	vbif->ops.enable_dbg_counter(vbif, 1, true);
+	vbif->ops.enable_dbg_counter(vbif, 2, true);
+	vbif->ops.enable_dbg_counter(vbif, 3, true);
+
+}
+
+void sde_vbif_read_vbif_counters(struct sde_kms *sde_kms, bool reset_cnt)
+{
+	// Configure vbif counters
+	struct sde_hw_vbif *vbif = NULL;
+	//struct sde_hw_mdp *mdp;
+	u32 vbif_idx = VBIF_RT;
+	//u32 val_l, val_h;
+	int i;
+
+	if (!sde_kms) {
+		SDE_ERROR("invalid arguments\n");
+		return;
+	}
+	//mdp = sde_kms->hw_mdp;
+
+	for (i = 0; i < ARRAY_SIZE(sde_kms->hw_vbif); i++) {
+		if (sde_kms->hw_vbif[i] &&
+				sde_kms->hw_vbif[i]->idx == vbif_idx) {
+			vbif = sde_kms->hw_vbif[i];
+			break;
+		}
+	}
+
+	// Read vbif debug counters
+	vbif->ops.read_dbg_counter(vbif, reset_cnt);
+
+}
+
+u32 sde_vbif_get_vbif_halt_status(struct sde_kms *sde_kms)
+{
+	// Configure vbif counters
+	struct sde_hw_vbif *vbif = NULL;
+	u32 vbif_idx = VBIF_RT;
+	int i;
+
+	if (!sde_kms) {
+		SDE_ERROR("invalid arguments!!\n");
+		return 0;
+	}
+
+	for (i = 0; i < ARRAY_SIZE(sde_kms->hw_vbif); i++) {
+		if (sde_kms->hw_vbif[i] &&
+				sde_kms->hw_vbif[i]->idx == vbif_idx) {
+			vbif = sde_kms->hw_vbif[i];
+			break;
+		}
+	}
+
+	// Read vbif debug counters
+	return vbif->ops.get_halt_status(vbif);
+
+}
+
 /**
  * sde_vbif_set_ot_limit - set OT based on usecase & configuration parameters
  * @vbif:	Pointer to hardware vbif driver

@@ -13,6 +13,18 @@ def define_sun():
                     "msm_drm",
                 ],
                 config_options = [
+#ifdef OPLUS_FEATURE_DISPLAY
+                    "OPLUS_FEATURE_DISPLAY",
+                    "OPLUS_FEATURE_DISPLAY_ADFR",
+                    "OPLUS_FEATURE_DISPLAY_HIGH_PRECISION",
+                    "OPLUS_FEATURE_DISPLAY_TEMP_COMPENSATION",
+                    "OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT",
+                    "OPLUS_TRACKPOINT_REPORT",
+                    "OPLUS_FEATURE_APDMR",
+#endif /* OPLUS_FEATURE_DISPLAY */
+#ifdef OPLUS_FEATURE_TP_BASIC
+                    "OPLUS_FEATURE_TP_BASIC",
+#endif /* OPLUS_FEATURE_TP_BASIC */
                     "CONFIG_DRM_MSM_SDE",
                     "CONFIG_SYNC_FILE",
                     "CONFIG_DRM_MSM_DSI",

@@ -1167,6 +1167,7 @@ static int sde_hw_intf_enable_te(struct sde_hw_intf *intf, bool enable)
 		return -EINVAL;
 
 	c = &intf->hw;
+	val = SDE_REG_READ(c, INTF_TEAR_TEAR_CHECK_EN);
 
 	if (enable)
 		val |= BIT(0);

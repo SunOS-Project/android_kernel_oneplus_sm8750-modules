@@ -25,6 +25,14 @@
 #include "sde_color_processing_aiqe.h"
 #include "sde_aiqe_common.h"
 
+#ifdef OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT
+#include "oplus_onscreenfingerprint.h"
+#endif /* OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT */
+
+#ifdef OPLUS_FEATURE_DISPLAY
+#include "oplus_display_interface.h"
+#endif /* OPLUS_FEATURE_DISPLAY */
+
 #define ALIGNED_OFFSET (U32_MAX & ~(LTM_GUARD_BYTES))
 
 static void _dspp_pcc_install_property(struct drm_crtc *crtc);
@@ -217,6 +225,8 @@ static void _update_pu_feature_enable(struct sde_crtc *sde_crtc,
 		sde_crtc->cp_pu_feature_mask |= BIT(feature);
 	else
 		sde_crtc->cp_pu_feature_mask &= ~BIT(feature);
+
+	SDE_EVT32(feature, enable, sde_crtc->cp_pu_feature_mask);
 }
 
 static int _set_dspp_vlut_feature(struct sde_hw_dspp *hw_dspp,
@@ -238,10 +248,23 @@ static int _set_dspp_pcc_feature(struct sde_hw_dspp *hw_dspp,
 {
 	int ret = 0;
 
+#ifdef OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT
+	if (oplus_ofp_is_supported()) {
+		oplus_ofp_set_dspp_pcc_feature(hw_cfg, hw_crtc, true);
+	}
+#endif /* OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT */
+
 	if (!hw_dspp || !hw_dspp->ops.setup_pcc)
 		ret = -EINVAL;
 	else
 		hw_dspp->ops.setup_pcc(hw_dspp, hw_cfg);
+
+#ifdef OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT
+	if (oplus_ofp_is_supported()) {
+		oplus_ofp_set_dspp_pcc_feature(hw_cfg, hw_crtc, false);
+	}
+#endif /* OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT */
+
 	return ret;
 }
 
@@ -1364,6 +1387,14 @@ static int _sde_cp_crtc_cache_property_helper(struct drm_crtc *crtc,
 	return ret;
 }
 
+#ifdef OPLUS_FEATURE_DISPLAY
+struct sde_kms *get_kms_(struct drm_crtc *crtc)
+{
+	return get_kms(crtc);
+}
+EXPORT_SYMBOL(get_kms_);
+#endif /* OPLUS_FEATURE_DISPLAY */
+
 u32 _sde_cp_get_num_dspp_mixers(struct sde_crtc *sde_crtc)
 {
 	int i;
@@ -1635,6 +1666,12 @@ static void _sde_cp_crtc_commit_feature(struct sde_cp_node *prop_node,
 			DRM_ERROR("failed to %s feature %d\n",
 				((feature_enabled) ? "enable" : "disable"),
 				prop_node->feature);
+#ifdef OPLUS_FEATURE_DISPLAY
+			oplus_sde_evtlog_dump_all();
+			if (get_eng_version() == FACTORY || get_eng_version() == AGING || get_eng_version() == HIGH_TEMP_AGING) {
+				SDE_DBG_DUMP(SDE_DBG_BUILT_IN_ALL, "panic");
+			}
+#endif /* OPLUS_FEATURE_DISPLAY */
 			goto disable_feature;
 		}
 	}
@@ -1670,6 +1707,13 @@ disable_feature:
 			hw_cfg.mixer_info = hw_lm;
 			hw_cfg.displayh = num_mixers * hw_lm->cfg.out_width;
 			hw_cfg.displayv = hw_lm->cfg.out_height;
+#ifdef OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT
+			if (oplus_ofp_is_supported()) {
+				if (prop_node->feature == SDE_CP_CRTC_DSPP_GAMUT) {
+					oplus_ofp_bypass_dspp_gamut(&hw_cfg, sde_crtc);
+				}
+			}
+#endif /* OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT */
 
 			ret = disable_handler(hw_dspp, &hw_cfg, sde_crtc);
 		}
@@ -2002,7 +2046,17 @@ static int _sde_cp_crtc_update_pu_features(struct drm_crtc *crtc, bool *need_flu
 				&cached_rect);
 		if (sde_kms_rect_is_equal(&user_rect, &cached_rect)) {
 			DRM_DEBUG_DRIVER("no change in list of ROIs\n");
+			return 0;
 		}
+	}
+
+	SDE_EVT32(0xbbbb, sde_crtc_state->user_roi_list.num_rects);
+	if (sde_crtc_state->user_roi_list.num_rects) {
+		SDE_EVT32(sde_crtc_state->user_roi_list.num_rects, sde_crtc_state->user_roi_list.roi[0].x1,
+			sde_crtc_state->user_roi_list.roi[0].y1, sde_crtc_state->user_roi_list.roi[0].x2,
+			sde_crtc_state->user_roi_list.roi[0].y2, sde_crtc_state->user_roi_list.spr_roi[0].x1,
+			sde_crtc_state->user_roi_list.spr_roi[0].y1,sde_crtc_state->user_roi_list.spr_roi[0].x2,
+			sde_crtc_state->user_roi_list.spr_roi[0].y2);
 	}
 
 	catalog = get_kms(&sde_crtc->base)->catalog;
@@ -2017,13 +2071,17 @@ static int _sde_cp_crtc_update_pu_features(struct drm_crtc *crtc, bool *need_flu
 	for (i = 0; i < hw_cfg.num_of_mixers; i++)
 		hw_cfg.dspp[i] = sde_crtc->mixers[i].hw_dspp;
 
+	SDE_EVT32(0xcccc, sde_crtc->cp_pu_feature_mask);
+
 	for (i = 0; i < SDE_CP_CRTC_MAX_PU_FEATURES; i++) {
 		feature_wrapper set_pu_feature =
 				set_crtc_pu_feature_wrappers[i];
 
 		if (!set_pu_feature ||
-				!(sde_crtc->cp_pu_feature_mask & BIT(i)))
+				!(sde_crtc->cp_pu_feature_mask & BIT(i))) {
+			SDE_EVT32(0xdead, i);
 			continue;
+		}
 
 		SDE_EVT32(i, hw_cfg.panel_width, hw_cfg.panel_height);
 		for (j = 0; j < hw_cfg.num_of_mixers; j++) {
@@ -2142,7 +2200,6 @@ void sde_cp_crtc_apply_properties(struct drm_crtc *crtc)
 			DRM_DEBUG_DRIVER("demura_sw_fuse value: 0x%x\n", demura_sw_fuse);
 		}
 	}
-
 	_sde_cp_flush_properties(crtc);
 	_sde_cp_check_mdnie_art_done(crtc);
 	mutex_lock(&sde_crtc->crtc_cp_lock);
@@ -4910,6 +4967,42 @@ static bool _sde_cp_feature_in_activelist(u32 feature, struct list_head *list)
 
 	return false;
 }
+
+#ifdef OPLUS_FEATURE_DISPLAY
+void oplus_sde_cp_crtc_pcc_change(struct drm_crtc *crtc_drm)
+{
+	struct sde_cp_node *prop_node = NULL, *n = NULL;
+	struct sde_crtc *crtc;
+
+	if (!crtc_drm) {
+		DRM_ERROR("invalid crtc handle");
+		return;
+	}
+	crtc = to_sde_crtc(crtc_drm);
+	mutex_lock(&crtc->crtc_cp_lock);
+	list_for_each_entry_safe(prop_node, n, &crtc->cp_feature_list, cp_feature_list) {
+		if (prop_node->feature != SDE_CP_CRTC_DSPP_PCC
+			&& prop_node->feature != SDE_CP_CRTC_DSPP_GAMUT) /* Gamut should be taken care of too */
+			continue;
+
+		if (_sde_cp_feature_in_dirtylist(prop_node->feature,
+						 &crtc->cp_dirty_list))
+			continue;
+
+		if (_sde_cp_feature_in_activelist(prop_node->feature,
+						 &crtc->cp_active_list)) {
+			_sde_cp_update_list(prop_node, crtc, true);
+			list_del_init(&prop_node->cp_active_list);
+			continue;
+		}
+
+		pr_err("oplus_pcc: %s %d prop_node->feature=%d\n", __func__, __LINE__, prop_node->feature);
+		_sde_cp_update_list(prop_node, crtc, true);
+	}
+
+	mutex_unlock(&crtc->crtc_cp_lock);
+}
+#endif /* OPLUS_FEATURE_DISPLAY */
 
 /* this func needs to be called within crtc_cp_lock mutex */
 static struct sde_cp_node *_sde_cp_feature_getnode_activelist(u32 feature, struct list_head *list)

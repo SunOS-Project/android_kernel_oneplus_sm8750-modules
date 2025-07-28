@@ -17,6 +17,16 @@
 #include "msm_drv.h"
 #include "sde_encoder.h"
 
+#ifdef OPLUS_FEATURE_DISPLAY
+#include "oplus_display_interface.h"
+#endif /* OPLUS_FEATURE_DISPLAY */
+#ifdef OPLUS_FEATURE_DISPLAY_ADFR
+#include "oplus_adfr.h"
+#endif /* OPLUS_FEATURE_DISPLAY_ADFR */
+#ifdef OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT
+#include "oplus_onscreenfingerprint.h"
+#endif /* OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT */
+
 #define to_dsi_bridge(x)     container_of((x), struct dsi_bridge, base)
 #define to_dsi_state(x)      container_of((x), struct dsi_connector_state, base)
 
@@ -200,6 +210,12 @@ static void dsi_bridge_pre_enable(struct drm_bridge *bridge)
 	if (bridge->encoder->crtc->state->active_changed)
 		atomic_set(&c_bridge->display->panel->esd_recovery_pending, 0);
 
+#ifdef OPLUS_FEATURE_DISPLAY
+	if (oplus_display_ops.bridge_pre_enable) {
+		oplus_display_ops.bridge_pre_enable(c_bridge->display, &c_bridge->dsi_mode);
+	}
+#endif /* OPLUS_FEATURE_DISPLAY */
+
 	/* By this point mode should have been validated through mode_fixup */
 	rc = dsi_display_set_mode(c_bridge->display,
 			&(c_bridge->dsi_mode), 0x0);
@@ -208,6 +224,11 @@ static void dsi_bridge_pre_enable(struct drm_bridge *bridge)
 		       c_bridge->id, rc);
 		return;
 	}
+#ifdef OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT
+	if (oplus_ofp_is_supported() && oplus_ofp_video_mode_30hz_aod_is_enabled()) {
+		oplus_ofp_video_mode_aod_handle(c_bridge->display, &(c_bridge->dsi_mode));
+	}
+#endif /* OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT */
 
 	if (c_bridge->dsi_mode.dsi_mode_flags &
 		(DSI_MODE_FLAG_SEAMLESS | DSI_MODE_FLAG_VRR |
@@ -561,6 +582,11 @@ static bool dsi_bridge_mode_fixup(struct drm_bridge *bridge,
 		return false;
 	}
 
+#ifdef OPLUS_FEATURE_DISPLAY
+	if (display->is_cont_splash_enabled)
+		dsi_mode.dsi_mode_flags &= ~DSI_MODE_FLAG_DMS;
+#endif /* OPLUS_FEATURE_DISPLAY */
+
 	/* Reject seamless transition when active changed */
 	if (crtc_state->active_changed &&
 		((dsi_mode.dsi_mode_flags & DSI_MODE_FLAG_VRR) ||
@@ -895,6 +921,10 @@ int dsi_conn_set_info_blob(struct drm_connector *connector,
 
 	sde_kms_info_add_keyint(info, "max os brightness", panel->bl_config.brightness_max_level);
 	sde_kms_info_add_keyint(info, "max panel backlight", panel->bl_config.bl_max_level);
+
+#ifdef OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT
+	sde_kms_info_add_keyint(info, "exit_aod_cost_frame", panel->oplus_panel.aod_off_frame_cost);
+#endif
 
 	if (panel->spr_info.enable) {
 		sde_kms_info_add_keystr(info, "spr_pack_type",

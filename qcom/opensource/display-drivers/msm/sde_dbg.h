@@ -13,6 +13,13 @@
 #include <soc/qcom/minidump.h>
 #include <drm/drm_print.h>
 
+#ifdef OPLUS_FEATURE_DISPLAY
+#include <soc/oplus/system/oplus_project.h>
+extern unsigned int is_project(int project);
+#define OPLUS_DP_CONTROL_GPIO 186
+#define SM8750_AP_GPIO_OFFSET 512
+#endif /* OPLUS_FEATURE_DISPLAY */
+
 /* select an uncommon hex value for the limiter */
 #define SDE_EVTLOG_DATA_LIMITER	(0xC0DEBEEF)
 #define SDE_EVTLOG_FUNC_ENTRY	0x1111
@@ -125,7 +132,11 @@ enum sde_dbg_dump_context {
  * sysfs node or panic. This prevents kernel log from evtlog message
  * flood.
  */
-#define SDE_EVTLOG_PRINT_ENTRY	256
+#ifndef OPLUS_FEATURE_DISPLAY
+#define SDE_EVTLOG_PRINT_ENTRY  256
+#else
+#define SDE_EVTLOG_PRINT_ENTRY  2048
+#endif /* OPLUS_FEATURE_DISPLAY */
 
 /*
  * evtlog keeps this number of entries in memory for debug purpose. This
@@ -552,5 +563,9 @@ void sde_rsc_debug_dump(u32 mux_sel);
  *	otherwise reset the dump mode to default mode.
  */
 void sde_dbg_update_dump_mode(bool enable_coredump);
+
+#ifdef OPLUS_FEATURE_DISPLAY
+void oplus_sde_evtlog_dump_all(void);
+#endif /* OPLUS_FEATURE_DISPLAY */
 
 #endif /* SDE_DBG_H_ */

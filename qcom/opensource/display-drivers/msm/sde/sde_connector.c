@@ -24,6 +24,29 @@
 #include <shd_drm.h>
 #include "sde_trace.h"
 
+#ifdef OPLUS_FEATURE_DISPLAY_ADFR
+#include "oplus_adfr.h"
+#endif /* OPLUS_FEATURE_DISPLAY_ADFR */
+
+#ifdef OPLUS_FEATURE_DISPLAY_TEMP_COMPENSATION
+#include "oplus_display_temp_compensation.h"
+#endif /* OPLUS_FEATURE_DISPLAY_TEMP_COMPENSATION */
+
+#ifdef OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT
+#include "oplus_onscreenfingerprint.h"
+#endif /* OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT */
+
+#ifdef OPLUS_FEATURE_DISPLAY
+#include "oplus_display_interface.h"
+#include "oplus_display_sysfs_attrs.h"
+#include "oplus_display_dc_diming.h"
+#include <linux/sched.h>
+#include "sde_trace.h"
+#include <linux/list.h>
+#include <linux/list_sort.h>
+#include <drm/drm_modes.h>
+#endif /* OPLUS_FEATURE_DISPLAY */
+
 #define BL_NODE_NAME_SIZE 32
 #define HDR10_PLUS_VSIF_TYPE_CODE      0x81
 
@@ -84,6 +107,7 @@ static const struct drm_prop_enum_list e_frame_trigger_mode[] = {
 	{FRAME_DONE_WAIT_SERIALIZE, "serialize_frame_trigger"},
 	{FRAME_DONE_WAIT_POSTED_START, "posted_start"},
 };
+
 static const struct drm_prop_enum_list e_panel_mode[] = {
 	{MSM_DISPLAY_VIDEO_MODE, "video_mode"},
 	{MSM_DISPLAY_CMD_MODE, "command_mode"},
@@ -261,6 +285,7 @@ static int sde_connector_apply_incremental_bl(struct sde_connector *c_conn)
 	return rc;
 }
 
+#ifndef OPLUS_FEATURE_DISPLAY
 static bool sde_connector_is_cont_bl_updates(struct sde_connector *c_conn)
 {
 	bool rc = false;
@@ -342,13 +367,19 @@ skip_incremental_update:
 	mutex_unlock(&c_conn->bl_vrr.bl_lock);
 	return rc;
 }
+#endif
 
 static int sde_backlight_device_update_status(struct backlight_device *bd)
 {
 	int brightness;
 	struct dsi_display *display;
 	struct sde_connector *c_conn = bl_get_data(bd);
+#ifdef OPLUS_FEATURE_DISPLAY
+	int bl_lvl = 0;
+	struct drm_event event;
+#else /* OPLUS_FEATURE_DISPLAY */
 	int bl_lvl;
+#endif /* OPLUS_FEATURE_DISPLAY */
 	int rc = 0;
 	struct sde_kms *sde_kms;
 
@@ -357,6 +388,14 @@ static int sde_backlight_device_update_status(struct backlight_device *bd)
 		SDE_ERROR("invalid kms\n");
 		return -EINVAL;
 	}
+
+#ifdef OPLUS_FEATURE_DISPLAY
+	SDE_ATRACE_BEGIN("sde_backlight_device_update_status");
+#endif /* OPLUS_FEATURE_DISPLAY */
+
+#ifdef OPLUS_FEATURE_DISPLAY_ADFR
+	oplus_adfr_osync_backlight_updated(c_conn, true);
+#endif /* OPLUS_FEATURE_DISPLAY_ADFR */
 
 	brightness = bd->props.brightness;
 
@@ -368,16 +407,21 @@ static int sde_backlight_device_update_status(struct backlight_device *bd)
 	display = _sde_connector_get_display(c_conn);
 	if (!display)
 		return 0;
-
 	if (brightness > display->panel->bl_config.brightness_max_level)
 		brightness = display->panel->bl_config.brightness_max_level;
 	if (brightness > c_conn->thermal_max_brightness)
 		brightness = c_conn->thermal_max_brightness;
 
 	display->panel->bl_config.brightness = brightness;
+#ifdef OPLUS_FEATURE_DISPLAY
+	if (oplus_display_ops.display_set_backlight_pre) {
+		oplus_display_ops.display_set_backlight_pre(display, &bl_lvl, brightness);
+	}
+#else /* OPLUS_FEATURE_DISPLAY */
 	/* map UI brightness into driver backlight level with rounding */
 	bl_lvl = mult_frac(brightness, display->panel->bl_config.bl_max_level,
 			display->panel->bl_config.brightness_max_level);
+#endif /* OPLUS_FEATURE_DISPLAY */
 
 	if (!bl_lvl && brightness)
 		bl_lvl = 1;
@@ -395,6 +439,7 @@ static int sde_backlight_device_update_status(struct backlight_device *bd)
 		goto done;
 	}
 
+#ifndef OPLUS_FEATURE_DISPLAY
 	if (c_conn->ops.set_backlight) {
 		/* skip notifying user space if bl is 0 */
 		if (c_conn->num_bl_frames && c_conn->frame_interval) {
@@ -410,9 +455,19 @@ static int sde_backlight_device_update_status(struct backlight_device *bd)
 		}
 		c_conn->unset_bl_level = 0;
 	}
+#else /* OPLUS_FEATURE_DISPLAY */
+	if (oplus_display_ops.display_set_backlight_post) {
+		oplus_display_ops.display_set_backlight_post(c_conn, display, &event, brightness, bl_lvl);
+	}
+	sde_dimming_bl_notify(c_conn, &display->panel->bl_config);
+#endif /* OPLUS_FEATURE_DISPLAY */
 
 done:
 	sde_vm_unlock(sde_kms);
+
+#ifdef OPLUS_FEATURE_DISPLAY
+	SDE_ATRACE_END("sde_backlight_device_update_status");
+#endif /* OPLUS_FEATURE_DISPLAY */
 
 	return rc;
 }
@@ -474,7 +529,13 @@ static int sde_backlight_setup(struct sde_connector *c_conn,
 	props.type = BACKLIGHT_RAW;
 	props.power = FB_BLANK_UNBLANK;
 	props.max_brightness = bl_config->brightness_max_level;
+#ifndef OPLUS_FEATURE_DISPLAY
 	props.brightness = bl_config->brightness_max_level;
+#else /* OPLUS_FEATURE_DISPLAY */
+	if (oplus_display_ops.backlight_setup_pre) {
+		oplus_display_ops.backlight_setup_pre(&props, display);
+	}
+#endif /* OPLUS_FEATURE_DISPLAY */
 	snprintf(bl_node_name, BL_NODE_NAME_SIZE, "panel%u-backlight",
 							display_count);
 	c_conn->bl_device = backlight_device_register(bl_node_name, dev->dev, c_conn,
@@ -487,6 +548,11 @@ static int sde_backlight_setup(struct sde_connector *c_conn,
 	}
 	c_conn->thermal_max_brightness = bl_config->brightness_max_level;
 
+#ifdef OPLUS_FEATURE_DISPLAY
+	if (oplus_display_ops.backlight_setup_post) {
+		oplus_display_ops.backlight_setup_post(display);
+	}
+#endif /* OPLUS_FEATURE_DISPLAY */
 	/**
 	 * In TVM, thermal cooling device is not enabled. Registering with dummy
 	 * thermal device will return a NULL leading to a failure. So skip it.
@@ -906,6 +972,15 @@ static int _sde_connector_update_power_locked(struct sde_connector *c_conn)
 		display = c_conn->display;
 		set_power = c_conn->ops.set_power;
 
+#ifdef OPLUS_FEATURE_DISPLAY_TEMP_COMPENSATION
+		if (oplus_temp_compensation_is_supported()) {
+			if (mode == SDE_MODE_DPMS_ON) {
+				SDE_DEBUG("update ntc temp immediately when power on\n");
+				oplus_temp_compensation_get_ntc_temp();
+			}
+		}
+#endif /* OPLUS_FEATURE_DISPLAY_TEMP_COMPENSATION */
+
 		mutex_unlock(&c_conn->lock);
 		rc = set_power(connector, mode, display);
 		mutex_lock(&c_conn->lock);
@@ -1050,6 +1125,9 @@ static int _sde_connector_update_bl_scale(struct sde_connector *c_conn)
 	struct dsi_display *dsi_display;
 	struct dsi_backlight_config *bl_config;
 	int rc = 0;
+#ifdef OPLUS_FEATURE_DISPLAY
+	struct backlight_device *bd;
+#endif /* OPLUS_FEATURE_DISPLAY */
 
 	if (!c_conn) {
 		SDE_ERROR("Invalid params sde_connector null\n");
@@ -1067,6 +1145,16 @@ static int _sde_connector_update_bl_scale(struct sde_connector *c_conn)
 		return -EINVAL;
 	}
 
+#ifdef OPLUS_FEATURE_DISPLAY
+	bd = c_conn->bl_device;
+	if (!bd) {
+		SDE_ERROR("Invalid params backlight_device null\n");
+		return -EINVAL;
+	}
+
+	mutex_lock(&bd->update_lock);
+#endif /* OPLUS_FEATURE_DISPLAY */
+
 	bl_config = &dsi_display->panel->bl_config;
 	bl_config->bl_scale = c_conn->bl_scale > MAX_BL_SCALE_LEVEL ?
 			MAX_BL_SCALE_LEVEL : c_conn->bl_scale;
@@ -1075,6 +1163,9 @@ static int _sde_connector_update_bl_scale(struct sde_connector *c_conn)
 
 	if (!c_conn->allow_bl_update) {
 		c_conn->unset_bl_level = bl_config->bl_level;
+#ifdef OPLUS_FEATURE_DISPLAY
+		mutex_unlock(&bd->update_lock);
+#endif /* OPLUS_FEATURE_DISPLAY */
 		return 0;
 	}
 
@@ -1091,8 +1182,20 @@ static int _sde_connector_update_bl_scale(struct sde_connector *c_conn)
 		sde_dimming_bl_notify(c_conn, bl_config);
 	c_conn->unset_bl_level = 0;
 
+#ifdef OPLUS_FEATURE_DISPLAY
+	mutex_unlock(&bd->update_lock);
+#endif /* OPLUS_FEATURE_DISPLAY */
+
 	return rc;
 }
+
+#ifdef OPLUS_FEATURE_DISPLAY
+int _sde_connector_update_bl_scale_(struct sde_connector *c_conn)
+{
+	return _sde_connector_update_bl_scale(c_conn);
+}
+EXPORT_SYMBOL(_sde_connector_update_bl_scale_);
+#endif /* OPLUS_FEATURE_DISPLAY */
 
 void sde_connector_set_colorspace(struct sde_connector *c_conn)
 {
@@ -1218,7 +1321,11 @@ void sde_connector_set_qsync_params(struct drm_connector *connector)
 	prop_dirty = msm_property_is_dirty(&c_conn->property_info,
 					&c_state->property_state,
 					CONNECTOR_PROP_QSYNC_MODE);
+#ifdef OPLUS_FEATURE_DISPLAY_ADFR
+	if (prop_dirty || oplus_adfr_need_restore_osync_mode(c_conn)) {
+#else /* OPLUS_FEATURE_DISPLAY_ADFR */
 	if (prop_dirty) {
+#endif /* OPLUS_FEATURE_DISPLAY_ADFR */
 		qsync_propval = sde_connector_get_property(c_conn->base.state,
 						CONNECTOR_PROP_QSYNC_MODE);
 		if (qsync_propval != c_conn->qsync_mode) {
@@ -1226,8 +1333,16 @@ void sde_connector_set_qsync_params(struct drm_connector *connector)
 					c_conn->qsync_mode, qsync_propval);
 			c_conn->qsync_updated = true;
 			c_conn->qsync_mode = qsync_propval;
+#ifdef OPLUS_FEATURE_DISPLAY_ADFR
+			OPLUS_ADFR_TRACE_INT("oplus_adfr_osync_mode", c_conn->qsync_mode);
+			oplus_adfr_set_osync_params(c_conn, OPLUS_ADFR_OSYNC_MODE);
+#endif /* OPLUS_FEATURE_DISPLAY_ADFR */
 		}
 	}
+
+#ifdef OPLUS_FEATURE_DISPLAY_ADFR
+	oplus_adfr_set_osync_params(c_conn, OPLUS_ADFR_OSYNC_MIN_FPS);
+#endif /* OPLUS_FEATURE_DISPLAY_ADFR */
 
 	prop_dirty = msm_property_is_dirty(&c_conn->property_info, &c_state->property_state,
 				CONNECTOR_PROP_AVR_STEP_STATE);
@@ -1328,6 +1443,11 @@ static int _sde_connector_update_dirty_properties(
 			/* nothing to do for most properties */
 			break;
 		}
+#ifdef OPLUS_FEATURE_DISPLAY
+		if (oplus_display_ops.connector_update_dirty_properties) {
+			oplus_display_ops.connector_update_dirty_properties(c_conn, idx);
+		}
+#endif /* OPLUS_FEATURE_DISPLAY */
 	}
 	mutex_unlock(&c_conn->property_info.property_lock);
 
@@ -1450,6 +1570,7 @@ int sde_connector_pre_kickoff(struct drm_connector *connector)
 	struct sde_connector *c_conn;
 	struct sde_connector_state *c_state;
 	struct msm_display_kickoff_params params;
+	struct drm_encoder *drm_enc;
 	struct dsi_display *display;
 	int rc;
 
@@ -1460,6 +1581,7 @@ int sde_connector_pre_kickoff(struct drm_connector *connector)
 
 	c_conn = to_sde_connector(connector);
 	c_state = to_sde_connector_state(connector->state);
+	drm_enc = c_conn->encoder;
 	if (!c_conn->display) {
 		SDE_ERROR("invalid connector display\n");
 		return -EINVAL;
@@ -2481,6 +2603,16 @@ static int sde_connector_atomic_set_property(struct drm_connector *connector,
 			SDE_ERROR_CONN(c_conn, "cannot set hdr info %d\n", rc);
 		break;
 	case CONNECTOR_PROP_QSYNC_MODE:
+#ifdef OPLUS_FEATURE_DISPLAY_ADFR
+		if (oplus_adfr_is_oa_use_fixed_te_c(c_conn)) {
+			SDE_INFO("oplus_adfr_is_oa_use_fixed_te not set qsync_mode %d\n", (int)val);
+			break;
+		} else {
+			msm_property_set_dirty(&c_conn->property_info,
+					&c_state->property_state, idx);
+			break;
+		}
+#endif /* OPLUS_FEATURE_DISPLAY_ADFR */
 	case CONNECTOR_PROP_AVR_STEP_STATE:
 	case CONNECTOR_PROP_EPT_FPS:
 		msm_property_set_dirty(&c_conn->property_info,
@@ -2506,6 +2638,19 @@ static int sde_connector_atomic_set_property(struct drm_connector *connector,
 	case CONNECTOR_PROP_DYN_TRANSFER_TIME:
 		_sde_connector_set_prop_dyn_transfer_time(c_conn, val);
 		break;
+
+#ifdef OPLUS_FEATURE_DISPLAY_ADFR
+	case CONNECTOR_PROP_ADFR_MIN_FPS:
+		oplus_adfr_property_update(c_conn, c_state, idx, val);
+		break;
+#endif /* OPLUS_FEATURE_DISPLAY_ADFR */
+
+#ifdef OPLUS_FEATURE_DISPLAY_HIGH_PRECISION
+	case CONNECTOR_PROP_HIGH_PRECISION_FPS:
+		msm_property_set_dirty(&c_conn->property_info, &c_state->property_state, idx);
+		break;
+#endif /* OPLUS_FEATURE_DISPLAY_HIGH_PRECISION */
+
 	case CONNECTOR_PROP_LP:
 		/* suspend case: clear stale MISR */
 		if (val == SDE_MODE_DPMS_OFF) {
@@ -2517,9 +2662,28 @@ static int sde_connector_atomic_set_property(struct drm_connector *connector,
 			}
 		}
 		break;
+
+#ifdef OPLUS_FEATURE_DISPLAY
+	case CONNECTOR_PROP_SYNC_BACKLIGHT_LEVEL:
+		msm_property_set_dirty(&c_conn->property_info, &c_state->property_state, idx);
+		break;
+	case CONNECTOR_PROP_SET_OSC_STATUS:
+		msm_property_set_dirty(&c_conn->property_info, &c_state->property_state, idx);
+		break;
+	case CONNECTOR_PROP_UPDATE_PANEL_APL_VALUE:
+		msm_property_set_dirty(&c_conn->property_info, &c_state->property_state, idx);
+		break;
+#endif /* OPLUS_FEATURE_DISPLAY */
+
 	default:
 		break;
 	}
+
+#ifdef OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT
+	if (oplus_ofp_is_supported()) {
+		oplus_ofp_property_update(c_conn, c_state, idx, val);
+	}
+#endif /* OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT */
 
 	/* check for custom property handling */
 	if (!rc && c_conn->ops.set_property) {
@@ -3290,6 +3454,41 @@ static void sde_connector_early_unregister(struct drm_connector *connector)
 	/* debugfs under connector->debugfs are deleted by drm_debugfs */
 }
 
+#ifdef OPLUS_FEATURE_DISPLAY_ADFR
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
+static int drm_mode_compare_for_adfr(void *priv, const struct list_head *lh_a,
+		const struct list_head *lh_b)
+#else
+static int drm_mode_compare_for_adfr(void *priv, struct list_head *lh_a,
+		struct list_head *lh_b)
+#endif
+{
+	struct drm_display_mode *a = list_entry(lh_a, struct drm_display_mode, head);
+	struct drm_display_mode *b = list_entry(lh_b, struct drm_display_mode, head);
+	int diff;
+
+	diff = ((b->type & DRM_MODE_TYPE_PREFERRED) != 0) -
+		((a->type & DRM_MODE_TYPE_PREFERRED) != 0);
+	if (diff)
+		return diff;
+	diff = a->hdisplay * a->vdisplay - b->hdisplay * b->vdisplay;
+	if (diff)
+		return diff;
+
+	diff = drm_mode_vrefresh(a) - drm_mode_vrefresh(b);
+	if (diff)
+		return diff;
+
+	diff = b->clock - a->clock;
+	return diff;
+}
+
+static void drm_mode_sort_for_adfr(struct list_head *mode_list)
+{
+	list_sort(NULL, mode_list, drm_mode_compare_for_adfr);
+}
+#endif /* OPLUS_FEATURE_DISPLAY_ADFR */
+
 static int sde_connector_fill_modes(struct drm_connector *connector,
 		uint32_t max_width, uint32_t max_height)
 {
@@ -3304,6 +3503,12 @@ static int sde_connector_fill_modes(struct drm_connector *connector,
 
 	mode_count = drm_helper_probe_single_connector_modes(connector,
 			max_width, max_height);
+
+#ifdef OPLUS_FEATURE_DISPLAY_ADFR
+	if (connector->connector_type == DRM_MODE_CONNECTOR_DSI) {
+		drm_mode_sort_for_adfr(&connector->modes);
+	}
+#endif /* OPLUS_FEATURE_DISPLAY_ADFR */
 
 	sde_conn->max_mode_width = sde_conn_get_max_mode_width(connector);
 
@@ -3461,7 +3666,11 @@ static int sde_connector_atomic_check(struct drm_connector *connector,
 	return 0;
 }
 
+#ifdef OPLUS_FEATURE_DISPLAY
+void _sde_connector_report_panel_dead(struct sde_connector *conn,
+#else
 static void _sde_connector_report_panel_dead(struct sde_connector *conn,
+#endif
 	bool skip_pre_kickoff)
 {
 	struct drm_event event;
@@ -3537,6 +3746,14 @@ int sde_connector_esd_status(struct drm_connector *conn)
 		mutex_unlock(&sde_conn->lock);
 		return -ETIMEDOUT;
 	}
+#ifdef OPLUS_FEATURE_DISPLAY
+	if (oplus_display_ops.display_check_status_pre) {
+		if (oplus_display_ops.display_check_status_pre(display->panel)) {
+			mutex_unlock(&sde_conn->lock);
+			return -ETIMEDOUT;
+		}
+	}
+#endif /* OPLUS_FEATURE_DISPLAY */
 	ret = sde_conn->ops.check_status(&sde_conn->base,
 					 sde_conn->display, true);
 	mutex_unlock(&sde_conn->lock);
@@ -3577,7 +3794,14 @@ static void sde_connector_check_status_work(struct work_struct *work)
 		mutex_unlock(&conn->lock);
 		return;
 	}
-
+#ifdef OPLUS_FEATURE_DISPLAY
+	if (oplus_display_ops.display_check_status_pre) {
+		if (oplus_display_ops.display_check_status_pre(((struct dsi_display *)(conn->display))->panel)) {
+			mutex_unlock(&conn->lock);
+			return;
+		}
+	}
+#endif /* OPLUS_FEATURE_DISPLAY */
 	rc = conn->ops.check_status(&conn->base, conn->display, false);
 	mutex_unlock(&conn->lock);
 
@@ -3595,6 +3819,11 @@ static void sde_connector_check_status_work(struct work_struct *work)
 		return;
 	}
 
+#ifdef OPLUS_FEATURE_DISPLAY
+	if (oplus_display_ops.connector_check_status_work) {
+		oplus_display_ops.connector_check_status_work(conn->display);
+	}
+#endif /* OPLUS_FEATURE_DISPLAY */
 	_sde_connector_report_panel_dead(conn, false);
 }
 
@@ -3899,6 +4128,15 @@ static int _sde_connector_install_properties(struct drm_device *dev,
 			msm_property_install_range(&c_conn->property_info, "dyn_bit_clk",
 					0x0, 0, ~0, 0, CONNECTOR_PROP_DYN_BIT_CLK);
 
+#ifdef OPLUS_FEATURE_DISPLAY
+		msm_property_install_volatile_range(&c_conn->property_info, "sync_backlight_level",
+				0x0, 0, ~0, 0, CONNECTOR_PROP_SYNC_BACKLIGHT_LEVEL);
+		msm_property_install_volatile_range(&c_conn->property_info, "set_osc_status",
+				0x0, 0, ~0, 0, CONNECTOR_PROP_SET_OSC_STATUS);
+		msm_property_install_volatile_range(&c_conn->property_info, "update_panel_apl_value",
+				0x0, 0, ~0, 0, CONNECTOR_PROP_UPDATE_PANEL_APL_VALUE);
+#endif /* OPLUS_FEATURE_DISPLAY */
+
 		msm_property_install_range(&c_conn->property_info, "dyn_transfer_time",
 				 0x0, 0, 1000000, 0, CONNECTOR_PROP_DYN_TRANSFER_TIME);
 
@@ -3965,6 +4203,24 @@ static int _sde_connector_install_properties(struct drm_device *dev,
 	}
 
 	if (connector_type == DRM_MODE_CONNECTOR_DSI) {
+#ifdef OPLUS_FEATURE_DISPLAY_ADFR
+		if (test_bit(SDE_FEATURE_QSYNC, sde_kms->catalog->features) && dsi_display &&
+		    dsi_display->panel && dsi_display->panel->qsync_caps.qsync_support) {
+			msm_property_install_range(&c_conn->property_info, "qsync_min_fps",
+					0x0, 0, ~0, 0, CONNECTOR_PROP_ADFR_MIN_FPS);
+		}
+#endif /* OPLUS_FEATURE_DISPLAY_ADFR */
+
+#ifdef OPLUS_FEATURE_DISPLAY_HIGH_PRECISION
+		msm_property_install_range(&c_conn->property_info, "high_precision_fps", 0x0, 0, ~0, 0, CONNECTOR_PROP_HIGH_PRECISION_FPS);
+#endif /* OPLUS_FEATURE_DISPLAY_HIGH_PRECISION */
+
+#ifdef OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT
+		if (oplus_ofp_is_supported()) {
+			msm_property_install_range(&c_conn->property_info, "hbm_enable",
+					0x0, 0, ~0, 0, CONNECTOR_PROP_HBM_ENABLE);
+		}
+#endif /* OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT */
 		_sde_connector_install_qsync_properties(sde_kms, c_conn, dsi_display, display_info);
 
 		if (test_bit(SDE_FEATURE_EPT, sde_kms->catalog->features))
@@ -4396,9 +4652,19 @@ int sde_connector_register_custom_event(struct sde_kms *kms,
 		ret = 0;
 		break;
 	case DRM_EVENT_SDE_HW_RECOVERY:
+//#ifdef OPLUS_FEATURE_DISPLAY
+//		if (get_eng_version() == FACTORY || get_eng_version() == AGING || get_eng_version() == HIGH_TEMP_AGING) {
+//			break;
+//		}
+//#endif
 		ret = _sde_conn_enable_hw_recovery(conn_drm);
-		sde_dbg_update_dump_mode(val);
+		//sde_dbg_update_dump_mode(val);
 		break;
+#ifdef OPLUS_FEATURE_DISPLAY
+	case DRM_EVENT_TP_TOUCHDOWN:
+		ret = 0;
+		break;
+#endif
 	default:
 		break;
 	}
@@ -4422,6 +4688,9 @@ int sde_connector_event_notify(struct drm_connector *connector, uint32_t type,
 	case DRM_EVENT_PANEL_DEAD:
 	case DRM_EVENT_SDE_HW_RECOVERY:
 	case DRM_EVENT_MISR_SIGN:
+#ifdef OPLUS_FEATURE_DISPLAY
+	case DRM_EVENT_TP_TOUCHDOWN:
+#endif
 		ret = 0;
 		break;
 	default:

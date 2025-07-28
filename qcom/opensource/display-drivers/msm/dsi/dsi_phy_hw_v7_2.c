@@ -10,6 +10,9 @@
 #include "dsi_defs.h"
 #include "dsi_phy_hw.h"
 #include "dsi_catalog.h"
+#ifdef OPLUS_FEATURE_DISPLAY
+#include "oplus_display_interface.h"
+#endif /* OPLUS_FEATURE_DISPLAY */
 
 #define DSIPHY_CMN_REVISION_ID0                                   0x000
 #define DSIPHY_CMN_REVISION_ID1                                   0x004
@@ -366,9 +369,16 @@ static void dsi_phy_hw_dphy_enable(struct dsi_phy_hw *phy, struct dsi_phy_cfg *c
 
 	glbl_rescode_top_ctrl = less_than_1500_mhz ? 0x3c : 0x03;
 	glbl_rescode_bot_ctrl = less_than_1500_mhz ? 0x38 : 0x3c;
+
+#ifdef OPLUS_FEATURE_DISPLAY
+	if (oplus_display_ops.dsi_phy_hw_dphy_enable) {
+		oplus_display_ops.dsi_phy_hw_dphy_enable(&glbl_str_swi_cal_sel_ctrl,
+				&glbl_hstx_str_ctrl_0);
+	}
+#else
 	glbl_str_swi_cal_sel_ctrl = 0x00;
 	glbl_hstx_str_ctrl_0 = 0x88;
-
+#endif /* OPLUS_FEATURE_DISPLAY */
 
 	split_link_enabled = cfg->split_link.enabled;
 	lanes_per_sublink = cfg->split_link.lanes_per_sublink;

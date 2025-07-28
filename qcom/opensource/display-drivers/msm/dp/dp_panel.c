@@ -776,9 +776,13 @@ static int dp_panel_read_dpcd(struct dp_panel *dp_panel, bool multi_func)
 	if (drm_dp_enhanced_frame_cap(dpcd))
 		link_info->capabilities |= DP_LINK_CAP_ENHANCED_FRAMING;
 
-	rlen = drm_dp_dpcd_read(panel->aux->drm_aux, DP_TEST_SINK_MISC, &temp, 1);
-	if ((rlen == 1) && (temp & DP_TEST_CRC_SUPPORTED))
-		link_info->capabilities |= DP_LINK_CAP_CRC;
+	/* Current CRC process is not good enough to run, for DP case getting sink CRC
+	* has never been runing into, this will cause no entry can be added to the frames,
+	* so disable CRC mode and TODO re-enable after CRC mechanisms is sufficient to run.
+	*/
+	//rlen = drm_dp_dpcd_read(panel->aux->drm_aux, DP_TEST_SINK_MISC, &temp, 1);
+	//if ((rlen == 1) && (temp & DP_TEST_CRC_SUPPORTED))
+	// link_info->capabilities |= DP_LINK_CAP_CRC;
 
 	dfp_count = dpcd[DP_DOWN_STREAM_PORT_COUNT] &
 						DP_DOWN_STREAM_PORT_COUNT;

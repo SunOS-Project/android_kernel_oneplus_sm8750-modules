@@ -5,11 +5,13 @@
 
 #define pr_fmt(fmt)	"[sde_cesta_hw:%s:%d]: " fmt, __func__, __LINE__
 
+#include <linux/io.h>
 #include <linux/kernel.h>
 #include <linux/debugfs.h>
 #include <linux/iopoll.h>
 
 #include "sde_cesta.h"
+#include "sde_dbg.h"
 
 #define RSCC_SEQ_PWR_CTRL_STATUS	0x2d0
 
@@ -26,6 +28,8 @@
 #define SCC_DEBUG_FLUSH_MISSED		0x20
 #define DEBUG_FLUSH_MISSED_CLEAR	0x24
 #define DISP_CC_MISC_CMD		0x0
+
+extern void __iomem *sde_crmc_base, *sde_crm_client_base, *sde_crmb_pt_base;
 
 void _sde_cesta_hw_init(struct sde_cesta *cesta)
 {
@@ -166,9 +170,71 @@ int _sde_cesta_hw_poll_handshake(struct sde_cesta *cesta, u32 idx)
 			100, 1000);
 }
 
+void _sde_cesta_curr_crm_votes(struct sde_cesta *cesta, u32 idx)
+{
+	u32 vcd0_curr_perf_ol, vcd1_curr_perf_ol, vcd0_seq_status, vcd1_seq_status;
+	u32 hwclient_p_node_q_bw_vote_status, hc2_node1, hc2_node2;
+	u32 hc2_node3, hc2_node4, hc2_node5;
+	u32 node0_tcs_cmd_data, n1_tcs_data, n2_tcs_data, n3_tcs_data, n4_tcs_data, n5_tcs_data;
+	u32 nd0_tcs_cmd_status, nd1_tcs_cmd_status, nd2_tcs_cmd_status, nd3_tcs_cmd_status, nd4_tcs_cmd_status, nd5_tcs_cmd_status;
+	u32 pt_client_fsm_status, scc0_hw_state_readback, scc1_hw_state_readback, scc2_hw_state_readback;
+
+	if (!sde_crmc_base || !sde_crm_client_base || !sde_crmb_pt_base)
+		return;
+
+	vcd0_curr_perf_ol = readl_relaxed(sde_crmc_base + 0x18); //dsi 0p9 1p2
+	vcd1_curr_perf_ol = readl_relaxed(sde_crmc_base + 0x280); // mdp clk
+
+	// read for VCD1_SEQ_STATUS
+	vcd0_seq_status = readl_relaxed(sde_crmc_base + 0x40);
+	vcd1_seq_status = readl_relaxed(sde_crmc_base + 0x2a8);
+
+
+	// individual hw client votes ab, ib
+	hwclient_p_node_q_bw_vote_status = readl_relaxed(sde_crm_client_base + 0x38 + ((0x1000) * idx) + 0x0);
+	hc2_node1 = readl_relaxed(sde_crm_client_base + 0x38 + ((0x1000) * idx) + (0x14 * 1));
+	hc2_node2 = readl_relaxed(sde_crm_client_base + 0x38 + ((0x1000) * idx) + (0x14 * 2));
+	hc2_node3 = readl_relaxed(sde_crm_client_base + 0x38 + ((0x1000) * idx) + (0x14 * 3));
+	hc2_node4 = readl_relaxed(sde_crm_client_base + 0x38 + ((0x1000) * idx) + (0x14 * 4));
+	hc2_node5 = readl_relaxed(sde_crm_client_base + 0x38 + ((0x1000) * idx) + (0x14 * 5));
+
+	// final values on epcb [0:13] -> ib, [14:27] -> ab
+	node0_tcs_cmd_data = readl_relaxed(sde_crmb_pt_base + 0x0);
+	n1_tcs_data = readl_relaxed(sde_crmb_pt_base + (0x14 *1));
+	n2_tcs_data = readl_relaxed(sde_crmb_pt_base + (0x14 *2));
+	n3_tcs_data = readl_relaxed(sde_crmb_pt_base + (0x14 *3));
+	n4_tcs_data = readl_relaxed(sde_crmb_pt_base + (0x14 *4));
+	n5_tcs_data = readl_relaxed(sde_crmb_pt_base + (0x14 *5));
+
+	// read for NDn_TCS_CMD_STATUS
+	nd0_tcs_cmd_status = readl_relaxed(sde_crmb_pt_base + 0xc + (0 * 0x14));
+	nd1_tcs_cmd_status = readl_relaxed(sde_crmb_pt_base + 0xc + (1 * 0x14));
+	nd2_tcs_cmd_status = readl_relaxed(sde_crmb_pt_base + 0xc + (2 * 0x14));
+	nd3_tcs_cmd_status = readl_relaxed(sde_crmb_pt_base + 0xc + (3 * 0x14));
+	nd4_tcs_cmd_status = readl_relaxed(sde_crmb_pt_base + 0xc + (4 * 0x14));
+	nd5_tcs_cmd_status = readl_relaxed(sde_crmb_pt_base + 0xc + (5 * 0x14));
+
+	// read for PT_CLIENT_FSM_STATUS
+	pt_client_fsm_status = readl_relaxed(sde_crmb_pt_base + 0x7c);
+
+	// read for SCC_2_HW_STATE_READBACK
+	scc0_hw_state_readback = dss_reg_r(&cesta->scc_io[0], SCC_HW_STATE_READBACK, cesta->debug_mode);
+	scc1_hw_state_readback = dss_reg_r(&cesta->scc_io[1], SCC_HW_STATE_READBACK, cesta->debug_mode);
+	scc2_hw_state_readback = dss_reg_r(&cesta->scc_io[2], SCC_HW_STATE_READBACK, cesta->debug_mode);
+
+	SDE_EVT32(vcd0_curr_perf_ol, vcd1_curr_perf_ol, hwclient_p_node_q_bw_vote_status, hc2_node1, hc2_node2, hc2_node3, hc2_node4, hc2_node5);
+	SDE_EVT32(vcd0_seq_status,vcd1_seq_status);
+	SDE_EVT32(nd0_tcs_cmd_status, nd1_tcs_cmd_status, nd2_tcs_cmd_status, nd3_tcs_cmd_status, nd4_tcs_cmd_status, nd5_tcs_cmd_status);
+	SDE_EVT32(pt_client_fsm_status);
+	SDE_EVT32(scc0_hw_state_readback, scc1_hw_state_readback, scc2_hw_state_readback);
+	SDE_EVT32(node0_tcs_cmd_data, n1_tcs_data, n2_tcs_data, n3_tcs_data, n4_tcs_data, n5_tcs_data);
+}
+
 void _sde_cesta_hw_get_status(struct sde_cesta *cesta, u32 idx, struct sde_cesta_scc_status *status)
 {
 	u32 val;
+	u32 debug1 = 0xc, debug2 = 0xd;
+	u32 debug_val1, debug_val2;
 
 	val = dss_reg_r(&cesta->scc_io[idx], SCC_HW_STATE_READBACK, cesta->debug_mode);
 
@@ -181,6 +247,28 @@ void _sde_cesta_hw_get_status(struct sde_cesta *cesta, u32 idx, struct sde_cesta
 
 	/* clear flush_missed counter */
 	dss_reg_w(&cesta->scc_io[idx], DEBUG_FLUSH_MISSED_CLEAR, 0x1, cesta->debug_mode);
+
+	if (get_eng_version() == FACTORY || get_eng_version() == AGING || get_eng_version() == HIGH_TEMP_AGING) {
+		debug_val1 = (debug1 << 1) | BIT(0);
+		dss_reg_w(&cesta->wrapper_io, 0x10, debug_val1, cesta->debug_mode);
+		wmb();
+		debug_val1 = dss_reg_r(&cesta->wrapper_io, 0x14, cesta->debug_mode);
+
+		dss_reg_w(&cesta->wrapper_io, 0x10, 0x0, cesta->debug_mode);
+		wmb();
+
+		debug_val2 = (debug2 << 1) | BIT(0);
+		dss_reg_w(&cesta->wrapper_io, 0x10, debug_val2, cesta->debug_mode);
+		wmb();
+		debug_val2 = dss_reg_r(&cesta->wrapper_io, 0x14, cesta->debug_mode);
+
+		dss_reg_w(&cesta->wrapper_io, 0x10, 0x0, cesta->debug_mode);
+		wmb();
+
+		SDE_EVT32(idx, debug1, debug_val1, debug2, debug_val2);
+		_sde_cesta_curr_crm_votes(cesta, idx);
+	}
+
 }
 
 u32 _sde_cesta_hw_get_pwr_event(struct sde_cesta *cesta)

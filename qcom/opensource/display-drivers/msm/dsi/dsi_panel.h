@@ -22,6 +22,9 @@
 #include "dsi_pwr.h"
 #include "dsi_parser.h"
 #include "msm_drv.h"
+#ifdef OPLUS_FEATURE_DISPLAY
+#include "oplus_panel.h"
+#endif /* OPLUS_FEATURE_DISPLAY */
 
 #define MAX_BL_LEVEL 4096
 #define MAX_BL_SCALE_LEVEL 1024
@@ -89,6 +92,13 @@ struct dsi_dfps_capabilities {
 	u32 *dfps_list;
 	u32 dfps_list_len;
 	bool dfps_support;
+	u32 *dfps_hfp_list;
+	u32 *dfps_hbp_list;
+	u32 *dfps_hpw_list;
+	u32 *dfps_vbp_list;
+	u32 *dfps_vfp_list;
+	u32 *dfps_vpw_list;
+
 };
 
 struct dsi_qsync_capabilities {
@@ -140,6 +150,7 @@ struct dsi_backlight_config {
 	u32 bl_min_level;
 	u32 bl_max_level;
 	u32 brightness_max_level;
+
 	/* current brightness value */
 	u32 brightness;
 	u32 bl_level;
@@ -188,6 +199,9 @@ enum esd_check_status_mode {
 	ESD_MODE_PANEL_TE,
 	ESD_MODE_SW_SIM_SUCCESS,
 	ESD_MODE_SW_SIM_FAILURE,
+#ifdef OPLUS_FEATURE_DISPLAY
+	ESD_MODE_PANEL_ERROR_FLAG,
+#endif /* OPLUS_FEATURE_DISPLAY */
 	ESD_MODE_MAX
 };
 
@@ -202,6 +216,9 @@ struct drm_panel_esd_config {
 	u8 *return_buf;
 	u8 *status_buf;
 	u32 groups;
+#ifdef OPLUS_FEATURE_DISPLAY
+	struct oplus_drm_panel_esd_config oplus_esd_cfg;
+#endif /* OPLUS_FEATURE_DISPLAY */
 };
 
 struct dsi_panel_spr_info {
@@ -267,6 +284,10 @@ struct dsi_panel {
 	bool allow_phy_power_off;
 	bool reset_gpio_always_on;
 	atomic_t esd_recovery_pending;
+
+#ifdef OPLUS_FEATURE_DISPLAY
+	struct oplus_panel oplus_panel;
+#endif /* OPLUS_FEATURE_DISPLAY */
 
 	bool skip_panel_off;
 	bool panel_initialized;
@@ -447,6 +468,15 @@ int dsi_panel_create_cmd_packets(const char *data, u32 length, u32 count,
 void dsi_panel_destroy_cmd_packets(struct dsi_panel_cmd_set *set);
 
 void dsi_panel_dealloc_cmd_packets(struct dsi_panel_cmd_set *set);
+
+#ifdef OPLUS_FEATURE_DISPLAY
+int dsi_panel_tx_cmd_set(struct dsi_panel *panel,
+		enum dsi_cmd_set_type type, bool do_peripheral_flush);
+int dsi_panel_parse_cmd_sets_sub(struct dsi_panel_cmd_set *cmd,
+		enum dsi_cmd_set_type type, struct dsi_parser_utils *utils);
+int dsi_panel_set_pinctrl_state(struct dsi_panel *panel, bool enable);
+int dsi_panel_reset(struct dsi_panel *panel);
+#endif /* OPLUS_FEATURE_DISPLAY */
 
 int dsi_panel_send_cmd(struct dsi_panel *panel,
 		struct msm_display_conn_params *params, enum dsi_cmd_set_type type,

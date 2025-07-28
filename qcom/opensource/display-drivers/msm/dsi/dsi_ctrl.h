@@ -973,6 +973,8 @@ void dsi_ctrl_toggle_error_interrupt_status(struct dsi_ctrl *dsi_ctrl, bool enab
  */
 void dsi_ctrl_transfer_cleanup(struct dsi_ctrl *dsi_ctrl);
 
+int dsi_ctrl_override_dma_cmd_trig(struct dsi_ctrl *dsi_ctrl, enum dsi_trigger_type type);
+
 /**
  * dsi_ctrl_set_lp2_load() - Add or remove LP2 load on DSI ctrl supplies.
  * @ctrl:			DSI controller handle.

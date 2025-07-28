@@ -955,6 +955,17 @@ static bool dp_display_send_hpd_event(struct dp_display_private *dp)
 	rc = kobject_uevent_env(&dev->primary->kdev->kobj, KOBJ_CHANGE, envp);
 	DP_INFO("uevent %s: %d\n", rc ? "failure" : "success", rc);
 
+#ifdef OPLUS_FEATURE_DISPLAY
+	if (is_project(24001) || is_project(24002) || is_project(24201)
+			|| is_project(24861)) {
+		if (connector_status_disconnected == connector->status) {
+			DP_INFO("set gpio %d to low\n", OPLUS_DP_CONTROL_GPIO);
+			gpio_direction_output(SM8750_AP_GPIO_OFFSET + OPLUS_DP_CONTROL_GPIO, 0);
+			gpio_set_value(SM8750_AP_GPIO_OFFSET + OPLUS_DP_CONTROL_GPIO, 0);
+		}
+	}
+#endif /* OPLUS_FEATURE_DISPLAY */
+
 	return true;
 }
 
@@ -1121,6 +1132,15 @@ static int dp_display_host_init(struct dp_display_private *dp)
 		flip = true;
 
 	reset = dp->debug->sim_mode ? false : !dp->hpd->multi_func;
+
+#ifdef OPLUS_FEATURE_DISPLAY
+	if (is_project(24001) || is_project(24002) || is_project(24201)
+			|| is_project(24861)) {
+		DP_INFO("set gpio %d to high\n", OPLUS_DP_CONTROL_GPIO);
+		gpio_direction_output(SM8750_AP_GPIO_OFFSET + OPLUS_DP_CONTROL_GPIO, 1);
+		gpio_set_value(SM8750_AP_GPIO_OFFSET + OPLUS_DP_CONTROL_GPIO, 1);
+	}
+#endif /* OPLUS_FEATURE_DISPLAY */
 
 	rc = dp->power->init(dp->power, flip);
 	if (rc) {

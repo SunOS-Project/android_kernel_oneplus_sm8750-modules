@@ -135,6 +135,11 @@ void sde_vbif_init_memtypes(struct sde_kms *sde_kms);
  */
 void sde_vbif_axi_halt_request(struct sde_kms *sde_kms);
 
+void sde_vbif_set_vbif_counters(struct sde_kms *sde_kms);
+
+void sde_vbif_read_vbif_counters(struct sde_kms *sde_kms, bool reset_cnt);
+u32 sde_vbif_get_vbif_halt_status(struct sde_kms *sde_kms);
+
 /**
  * sde_vbif_halt_xin_mask - halts/unhalts all the xin clients present in
  * the mask.

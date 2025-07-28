@@ -23,6 +23,10 @@
 #include "dsi_phy.h"
 #include "dsi_panel.h"
 
+#ifdef OPLUS_FEATURE_DISPLAY
+#include "oplus_display.h"
+#endif /* OPLUS_FEATURE_DISPLAY */
+
 #define MAX_DSI_CTRLS_PER_DISPLAY             2
 #define DSI_CLIENT_NAME_SIZE		20
 #define MAX_CMDLINE_PARAM_LEN	 512
@@ -308,6 +312,10 @@ struct dsi_display {
 	struct dsi_panel_cmd_set cmd_set;
 
 	bool enabled;
+
+#ifdef OPLUS_FEATURE_DISPLAY
+	struct oplus_dsi_display oplus_display;
+#endif /* OPLUS_FEATURE_DISPLAY */
 };
 
 int dsi_display_dev_probe(struct platform_device *pdev);
@@ -461,8 +469,8 @@ int dsi_display_find_mode(struct dsi_display *display,
  * Return: 0 if supported or error code.
  */
 int dsi_display_validate_mode(struct dsi_display *display,
-			      struct dsi_display_mode *mode,
-			      u32 flags);
+				  struct dsi_display_mode *mode,
+				  u32 flags);
 
 /**
  * dsi_display_validate_mode_change() - validates mode if variable refresh case
@@ -640,6 +648,9 @@ int dsi_display_set_tpg_state(struct dsi_display *display, bool enable,
 		u32 init_val,
 		enum dsi_ctrl_tpg_pattern pattern);
 
+int dsi_display_override_dma_cmd_trig(struct dsi_display *display,
+        enum dsi_trigger_type type);
+
 /**
  * dsi_display_set_lp2_load() - Add or remove LP2 load on DSI display supplies.
  * @display:		Handle to display.
@@ -726,7 +737,7 @@ int dsi_display_cmd_transfer(struct drm_connector *connector,
  * @ts:                 Command time stamp in nano-seconds.
  */
 int dsi_display_cmd_receive(void *display, const char *cmd_buf,
-			    u32 cmd_buf_len, u8 *recv_buf, u32 recv_buf_len, ktime_t *ts);
+				u32 cmd_buf_len, u8 *recv_buf, u32 recv_buf_len, ktime_t *ts);
 
 /**
  * dsi_display_soft_reset() - perform a soft reset on DSI controller
@@ -815,6 +826,16 @@ enum dsi_pixel_format dsi_display_get_dst_format(
  * Return: Zero on Success
  */
 int dsi_display_cont_splash_config(void *display);
+
+#ifdef OPLUS_FEATURE_DISPLAY
+/* Add for implement panel register read */
+int dsi_host_alloc_cmd_tx_buffer(struct dsi_display *display);
+int dsi_display_cmd_engine_enable(struct dsi_display *display);
+int dsi_display_cmd_engine_disable(struct dsi_display *display);
+bool phy_pll_bypass(struct dsi_display *display);
+void dsi_display_set_cmd_tx_ctrl_flags(struct dsi_display *display,
+        struct dsi_cmd_desc *cmd);
+#endif /* OPLUS_FEATURE_DISPLAY */
 
 /**
  * dsi_display_cont_splash_res_disable() - Disable resource votes added in probe

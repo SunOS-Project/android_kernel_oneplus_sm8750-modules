@@ -189,9 +189,47 @@ module_entry(
                               "rotator/sde_rotator_r1_debug.c",
                               "rotator/sde_rotator_r3_debug.c"],
             },
+#ifdef OPLUS_FEATURE_DISPLAY
+         "OPLUS_FEATURE_DISPLAY" : [
+             "oplus/SM8750/oplus_display_utils.c",
+             "oplus/SM8750/oplus_display_sysfs_attrs.c",
+             "oplus/SM8750/oplus_display_dc_diming.c",
+             "oplus/SM8750/oplus_display_ffl.c",
+             "oplus/SM8750/oplus_display_device.c",
+             "oplus/SM8750/oplus_display_proc.c",
+             "oplus/SM8750/oplus_display_power.c",
+             "oplus/SM8750/oplus_display_effect.c",
+             "oplus/SM8750/oplus_display_device_ioctl.c",
+             "oplus/SM8750/oplus_display_bl.c",
+             "oplus/SM8750/oplus_display_interface.c",
+             "oplus/SM8750/oplus_display_pwm.c",
+             "oplus/SM8750/oplus_display_parse.c",
+             "oplus/SM8750/oplus_display_panel_cmd.c",
+             "oplus/SM8750/oplus_display_ext.c",
+             "oplus/SM8750/oplus_display_esd.c",
+             "oplus/SM8750/oplus_bl_ic_ktz8868.c",
+         ],
+         "OPLUS_FEATURE_DISPLAY_ADFR" : [
+             "oplus/SM8750/oplus_adfr.c",
+         ],
+         "OPLUS_FEATURE_DISPLAY_TEMP_COMPENSATION" : [
+             "oplus/SM8750/oplus_display_temp_compensation.c",
+         ],
+         "OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT" : [
+             "oplus/SM8750/oplus_onscreenfingerprint.c",
+         ],
+#endif /* OPLUS_FEATURE_DISPLAY */
+#ifdef OPLUS_FEATURE_TP_BASIC
+         "OPLUS_FEATURE_TP_BASIC" : [
+             "oplus/SM8750/oplus_display_notify_tp.c",
+         ],
+#endif /* OPLUS_FEATURE_TP_BASIC */
       },
       deps = [
          "//vendor/qcom/opensource/mm-drivers:mm_drivers_headers",
+#ifdef OPLUS_FEATURE_DISPLAY
+         "//vendor/oplus/kernel/device_info/oplus_fpga:oplus_bsp_fpga_monitor",
+#endif /* OPLUS_FEATURE_DISPLAY */
       ],
 
       # Configs are handled by config_options = []

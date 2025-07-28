@@ -10,6 +10,10 @@
 #include <linux/types.h>
 #include <drm/drm_mipi_dsi.h>
 #include "msm_drv.h"
+#ifdef OPLUS_FEATURE_DISPLAY
+#include "oplus_panel.h"
+#include "oplus_defs.h"
+#endif /* OPLUS_FEATURE_DISPLAY */
 
 #define DSI_H_TOTAL(t) (((t)->h_active) + ((t)->h_back_porch) + \
 			((t)->h_sync_width) + ((t)->h_front_porch))
@@ -31,6 +35,7 @@
 								##__VA_ARGS__)
 #define DSI_DEBUG(fmt, ...)	DRM_DEV_DEBUG(NULL, "[msm-dsi-debug]: "fmt, \
 								##__VA_ARGS__)
+
 /**
  * enum dsi_pixel_format - DSI pixel formats
  * @DSI_PIXEL_FORMAT_RGB565:
@@ -224,6 +229,7 @@ enum dsi_dfps_type {
 	DSI_DFPS_IMMEDIATE_CLK,
 	DSI_DFPS_IMMEDIATE_HFP,
 	DSI_DFPS_IMMEDIATE_VFP,
+	DSI_DFPS_IMMEDIATE_HV_P,
 	DSI_DFPS_MAX
 };
 
@@ -249,6 +255,7 @@ enum dsi_dyn_clk_feature_type {
 	DSI_DYN_CLK_TYPE_MAX
 };
 
+#ifndef OPLUS_FEATURE_DISPLAY
 /**
  * enum dsi_cmd_set_type  - DSI command set type
  * @DSI_CMD_SET_PRE_ON:	                   Panel pre on
@@ -293,7 +300,7 @@ enum dsi_dyn_clk_feature_type {
  * @DSI_CMD_SET_STICKY_STILL_DISABLE       Still indiaction disable command
  * @DSI_CMD_SET_STICKY_ON_FLY:             Still indication enable for only one frame
  * @DSI_CMD_SET_TRIGGER_SELF_REFRESH:      Trigger self refresh from Gram
- * @DSI_CMD_SET_FPS_SWITCH:		   FPS Switch
+ * @DSI_CMD_SET_FPS_SWITCH                 Set fps switch
  * @DSI_CMD_SET_MAX
  */
 enum dsi_cmd_set_type {
@@ -340,7 +347,7 @@ enum dsi_cmd_set_type {
 	DSI_CMD_SET_FPS_SWITCH,
 	DSI_CMD_SET_MAX
 };
-
+#endif /* OPLUS_FEATURE_DISPLAY */
 /**
  * enum dsi_cmd_set_state - command set state
  * @DSI_CMD_SET_STATE_LP:   dsi low power mode
@@ -433,6 +440,9 @@ struct dsi_panel_cmd_set {
 	u32 count;
 	u32 ctrl_idx;
 	struct dsi_cmd_desc *cmds;
+#ifdef OPLUS_FEATURE_DISPLAY
+	struct oplus_panel_cmd_set oplus_cmd_set;
+#endif /* OPLUS_FEATURE_DISPLAY */
 };
 
 /**
@@ -563,6 +573,7 @@ struct dsi_host_common_cfg {
 	enum dsi_te_mode te_mode;
 	enum dsi_trigger_type mdp_cmd_trigger;
 	enum dsi_trigger_type dma_cmd_trigger;
+	enum dsi_trigger_type force_dma_cmd_trigger;
 	u32 cmd_trigger_stream;
 	enum dsi_color_swap_mode swap_mode;
 	bool bit_swap_red;
@@ -722,6 +733,36 @@ struct dsi_display_mode_priv_info {
 	bool widebus_support;
 	u32 allowed_mode_switch;
 	bool disable_rsc_solver;
+#ifdef OPLUS_FEATURE_DISPLAY
+	/* Add for apollo */
+	/* width & period of vsync may not conform to refresh rate
+	 * add variable to store width & period of vsync
+	 */
+	struct oplus_display_mode_priv_info oplus_priv_info;
+#endif /* OPLUS_FEATURE_DISPLAY */
+#ifdef OPLUS_FEATURE_DISPLAY_ADFR
+	unsigned int *oplus_adfr_min_fps_mapping_table;
+	unsigned char oplus_adfr_min_fps_mapping_table_count;
+	unsigned int oplus_adfr_idle_off_min_fps;
+	bool oplus_adfr_idle_min_fps_log;
+#endif /* OPLUS_FEATURE_DISPLAY_ADFR */
+#ifdef OPLUS_FEATURE_DISPLAY_HIGH_PRECISION
+	unsigned int *oplus_adfr_high_precision_fps_mapping_table;
+	unsigned char oplus_adfr_high_precision_fps_mapping_table_count;
+	unsigned int oplus_adfr_sw_stabilize_frame_threshold_us;
+	unsigned int *oplus_adfr_sw_stabilize_frame_config_table;
+	unsigned int oplus_adfr_sw_stabilize_frame_config_table_count;
+	unsigned int *oplus_adfr_hw_stabilize_frame_config_table;
+	unsigned int oplus_adfr_hw_stabilize_frame_config_table_count;
+#endif /* OPLUS_FEATURE_DISPLAY_HIGH_PRECISION */
+#ifdef OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT
+	bool oplus_ofp_need_to_separate_backlight;
+	bool oplus_ofp_need_to_sync_data_in_aod_unlocking;
+	unsigned int oplus_ofp_backlight_on_period;
+	unsigned int oplus_ofp_hbm_on_period;
+	unsigned int oplus_ofp_aod_off_insert_black_frame;
+	unsigned int oplus_ofp_aod_off_black_frame_total_time;
+#endif /* OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT */
 };
 
 /**
@@ -746,6 +787,9 @@ struct dsi_display_mode {
 	bool is_preferred;
 	u32 mode_idx;
 	struct dsi_display_mode_priv_info *priv_info;
+#ifdef OPLUS_FEATURE_DISPLAY_ADFR
+	u32 vsync_source;
+#endif /* OPLUS_FEATURE_DISPLAY_ADFR */
 };
 
 /**

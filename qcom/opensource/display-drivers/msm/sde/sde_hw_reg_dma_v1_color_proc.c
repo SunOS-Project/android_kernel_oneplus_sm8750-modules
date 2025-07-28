@@ -6479,7 +6479,11 @@ int reg_dmav1_setup_spr_pu_common(struct sde_hw_dspp *ctx, struct sde_hw_cp_cfg 
 
 		reg = APPLY_MASK_AND_SHIFT(roi_list->spr_roi[0].x1, 16, 0) |
 			APPLY_MASK_AND_SHIFT(roi_list->spr_roi[0].y1, 16, 16);
+
+		SDE_EVT32(roi_list->spr_roi[0].x1, roi_list->spr_roi[0].y1);
 	}
+
+	SDE_EVT32(0xdead, reg);
 
 	REG_DMA_INIT_OPS(dma_write_cfg, MDSS, SPR_PU_CFG, buffer);
 	REG_DMA_SETUP_OPS(dma_write_cfg, 0, NULL, 0, HW_BLK_SELECT, 0, 0, 0);

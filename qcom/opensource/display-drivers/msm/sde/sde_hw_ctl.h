@@ -636,20 +636,6 @@ struct sde_hw_ctl_ops {
 	void (*cesta_flush)(struct sde_hw_ctl *ctx, struct sde_ctl_cesta_cfg *cfg);
 
 	/**
-	 * Reserve cesta for this ctl path
-	 * @ctx: ctl path ctx pointer
-	 * @scc_index: scc index
-	 */
-	void (*cesta_scc_reserve)(struct sde_hw_ctl *ctx, u32 scc_index);
-
-	/**
-	 * Reset Reservation cesta for all the CTL paths in VM
-	 * @ctx: ctl path ctx pointer
-	 * @ctl_count: ctl data path count
-	 */
-	void (*reset_cesta_reserve)(struct sde_hw_ctl *ctx, u32 ctl_count);
-
-	/**
 	 * setup flush sync mode for slave and master cores.
 	 * @ctx       : ctl path ctx pointer
 	 * @is_master : true for master, false for slave)
@@ -670,6 +656,20 @@ struct sde_hw_ctl_ops {
 	 * @ctx       : ctl path ctx pointer
 	 */
 	bool (*get_flush_sync_mode)(struct sde_hw_ctl *ctx);
+
+	/**
+	 * Reserve cesta for this ctl path
+	 * @ctx: ctl path ctx pointer
+	 * @scc_index: scc index
+	 */
+	void (*cesta_scc_reserve)(struct sde_hw_ctl *ctx, u32 scc_index);
+
+	/**
+	* Reset Reservation cesta for all the CTL paths in VM
+	* @ctx: ctl path ctx pointer
+	* @ctl_count: ctl data path count
+	*/
+	void (*reset_cesta_reserve)(struct sde_hw_ctl *ctx, u32 ctl_count);
 
 	/**
 	 * Set ctl_path INTF master

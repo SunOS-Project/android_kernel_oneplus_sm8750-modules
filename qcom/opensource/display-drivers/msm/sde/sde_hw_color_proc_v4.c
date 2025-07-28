@@ -8,6 +8,12 @@
 #include "sde_hw_color_proc_v4.h"
 #include "sde_dbg.h"
 
+#ifdef OPLUS_FEATURE_DISPLAY
+#include "sde_connector.h"
+#include "dsi_display.h"
+#include "oplus_display_interface.h"
+#endif /* OPLUS_FEATURE_DISPLAY */
+
 static int sde_write_3d_gamut(struct sde_hw_blk_reg_map *hw,
 		struct drm_msm_3d_gamut *payload, u32 base,
 		u32 *opcode, u32 pipe, u32 scale_tbl_a_len,
@@ -225,6 +231,11 @@ void sde_setup_dspp_pccv4(struct sde_hw_dspp *ctx, void *cfg)
 	}
 
 	pcc_cfg = hw_cfg->payload;
+#ifdef OPLUS_FEATURE_DISPLAY
+	if (oplus_display_ops.setup_dspp_pccv4_pre) {
+		oplus_display_ops.setup_dspp_pccv4_pre(pcc_cfg);
+	}
+#endif /* OPLUS_FEATURE_DISPLAY */
 
 	for (i = 0; i < PCC_NUM_PLANES; i++) {
 		base = ctx->cap->sblk->pcc.base + (i * sizeof(u32));
@@ -272,6 +283,12 @@ void sde_setup_dspp_pccv4(struct sde_hw_dspp *ctx, void *cfg)
 	}
 
 	SDE_REG_WRITE(&ctx->hw, ctx->cap->sblk->pcc.base, PCC_EN);
+
+#ifdef OPLUS_FEATURE_DISPLAY
+	if (oplus_display_ops.setup_dspp_pccv4_post) {
+		oplus_display_ops.setup_dspp_pccv4_post(pcc_cfg);
+	}
+#endif /* OPLUS_FEATURE_DISPLAY */
 }
 
 void sde_setup_dspp_ltm_threshv1(struct sde_hw_dspp *ctx, void *cfg)

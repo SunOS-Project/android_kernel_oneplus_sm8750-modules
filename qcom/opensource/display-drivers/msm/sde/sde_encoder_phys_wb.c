@@ -18,6 +18,9 @@
 #include "sde_crtc.h"
 #include "sde_hw_dnsc_blur.h"
 #include "sde_trace.h"
+#ifdef OPLUS_FEATURE_DISPLAY
+#include "../oplus/SM8750/oplus_display_effect.h"
+#endif
 
 #define to_sde_encoder_phys_wb(x) \
 	container_of(x, struct sde_encoder_phys_wb, base)
@@ -2028,6 +2031,11 @@ static void _sde_encoder_phys_wb_frame_done_helper(void *arg, bool frame_error)
 
 	if (wb_enc->hw_wb->ops.get_frame_count)
 		frame_count = wb_enc->hw_wb->ops.get_frame_count(wb_enc->hw_wb);
+
+#ifdef OPLUS_FEATURE_DISPLAY
+	__oplus_read_apl_thread_ctl(true);
+#endif
+
 end:
 	if (frame_error && wb_enc->hw_wb->ops.get_ubwc_error
 			&& wb_enc->hw_wb->ops.clear_ubwc_error) {

@@ -11,8 +11,15 @@
 #include "sde_formats.h"
 #include "dsi_display.h"
 #include "sde_trace.h"
+#include "sde_vbif.h"
 #include "msm_drv.h"
 #include <drm/drm_fixed.h>
+
+u32 g_vbif_counters_enabled = 0;
+
+#ifdef OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT
+#include "oplus_onscreenfingerprint.h"
+#endif /* OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT */
 
 #define SDE_DEBUG_VIDENC(e, fmt, ...) SDE_DEBUG("enc%d intf%d " fmt, \
 		(e) && (e)->base.parent ? \
@@ -1160,6 +1167,19 @@ static void sde_encoder_phys_vid_vblank_irq(void *arg, int irq_idx)
 
 	SDE_ATRACE_BEGIN("vblank_irq");
 
+	if (get_eng_version() == FACTORY || get_eng_version() == AGING || get_eng_version() == HIGH_TEMP_AGING) {
+		if (phys_enc->sde_kms) {
+			if (!g_vbif_counters_enabled) {
+				sde_vbif_set_vbif_counters(phys_enc->sde_kms);
+				g_vbif_counters_enabled = 1;
+			} else {
+				sde_vbif_read_vbif_counters(phys_enc->sde_kms, true);
+			}
+		} else {
+			pr_err("ERROR not valid sde_kms during vblank\n");
+		}
+	}
+
 	/*
 	 * only decrement the pending flush count if we've actually flushed
 	 * hardware. due to sw irq latency, vblank may have already happened
@@ -1192,6 +1212,12 @@ not_flushed:
 
 	spin_unlock_irqrestore(phys_enc->enc_spinlock, lock_flags);
 
+	if (get_eng_version() == FACTORY || get_eng_version() == AGING || get_eng_version() == HIGH_TEMP_AGING) {
+		if (reset_status) {
+			SDE_DBG_DUMP_WQ(SDE_DBG_BUILT_IN_ALL, "panic");
+		}
+	}
+
 	if (event && phys_enc->parent_ops.handle_frame_done)
 		phys_enc->parent_ops.handle_frame_done(phys_enc->parent,
 			phys_enc, event);
@@ -1222,6 +1248,12 @@ not_flushed:
 
 	/* Signal any waiting atomic commit thread */
 	wake_up_all(&phys_enc->pending_kickoff_wq);
+#ifdef OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT
+	if (oplus_ofp_is_supported()) {
+		oplus_ofp_panel_hbm_status_update(phys_enc);
+		oplus_ofp_notify_uiready(phys_enc);
+	}
+#endif /* OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT */
 	SDE_ATRACE_END("vblank_irq");
 }
 
@@ -1271,6 +1303,21 @@ static void sde_encoder_phys_vid_underrun_irq(void *arg, int irq_idx)
 	if (phys_enc->parent_ops.handle_underrun_virt)
 		phys_enc->parent_ops.handle_underrun_virt(phys_enc->parent,
 			phys_enc);
+
+	if (get_eng_version() == FACTORY || get_eng_version() == AGING || get_eng_version() == HIGH_TEMP_AGING) {
+		if (phys_enc->sde_kms) {
+			if (g_vbif_counters_enabled) {
+				// Only access the counters once they have been initialized by vblank
+				sde_vbif_read_vbif_counters(phys_enc->sde_kms, false);
+			} else {
+				// Not an error but the underrun happened before the vsync
+				SDE_EVT32(0xbeef1);
+			}
+		} else {
+			SDE_EVT32(0xbeef2);
+			pr_err("ERROR not valid sde_kms during underrun\n");
+		}
+	}
 }
 
 static void sde_encoder_phys_vid_esync_emsync_irq(void *arg, int irq_idx)
@@ -1469,6 +1516,7 @@ static int sde_encoder_phys_vid_control_vblank_irq(
 			atomic_dec_return(&phys_enc->vblank_refcount) == 0) {
 		ret = sde_encoder_helper_unregister_irq(phys_enc,
 				INTR_IDX_VSYNC);
+		g_vbif_counters_enabled = 0;
 		if (ret)
 			atomic_inc_return(&phys_enc->vblank_refcount);
 		if (sde_enc && sde_enc->disp_info.vrr_caps.vrr_support) {
@@ -1711,6 +1759,7 @@ static void sde_encoder_phys_vid_enable(struct sde_encoder_phys *phys_enc)
 	}
 	priv = phys_enc->parent->dev->dev_private;
 
+	g_vbif_counters_enabled = 0;
 	vid_enc = to_sde_encoder_phys_vid(phys_enc);
 	intf = phys_enc->hw_intf;
 	ctl = phys_enc->hw_ctl;
@@ -2144,6 +2193,10 @@ static int sde_encoder_phys_vid_prepare_for_kickoff(
 		SDE_ERROR_VIDENC(vid_enc, "ctl %d reset failure: %d\n",
 				ctl->idx, rc);
 
+		if (get_eng_version() == FACTORY || get_eng_version() == AGING || get_eng_version() == HIGH_TEMP_AGING) {
+			SDE_EVT32(DRMID(phys_enc->parent), SDE_EVTLOG_PANIC);
+			SDE_DBG_DUMP(SDE_DBG_BUILT_IN_ALL, "panic");
+		}
 		++vid_enc->error_count;
 
 		/* to avoid flooding, only log first time, and "dead" time */
@@ -2394,6 +2447,7 @@ static void sde_encoder_phys_vid_disable(struct sde_encoder_phys *phys_enc)
 	sde_enc = to_sde_encoder_virt(phys_enc->parent);
 	info = &sde_enc->disp_info;
 
+	g_vbif_counters_enabled = 0;
 	vid_enc = to_sde_encoder_phys_vid(phys_enc);
 	if (!phys_enc->hw_intf || !phys_enc->hw_ctl) {
 		SDE_ERROR("invalid hw_intf %d hw_ctl %d\n",
@@ -2702,14 +2756,17 @@ void sde_encoder_phys_vid_add_enc_to_minidump(struct sde_encoder_phys *phys_enc)
 void sde_encoder_phys_vid_cesta_ctrl_cfg(struct sde_encoder_phys *phys_enc,
 		struct sde_cesta_ctrl_cfg *cfg, bool *req_flush, bool *req_scc)
 {
+	struct sde_encoder_virt *sde_enc = to_sde_encoder_virt(phys_enc->parent);
 	bool qsync_en = sde_connector_get_qsync_mode(phys_enc->connector);
+	bool disable_hw_sleep = sde_enc->disp_info.disable_cesta_hw_sleep;
 
 	cfg->enable = true;
 	cfg->avr_enable = qsync_en;
 	cfg->intf = phys_enc->intf_idx - INTF_0;
 	cfg->auto_active_on_panic = true;
 	cfg->req_mode = qsync_en ? SDE_CESTA_CTRL_REQ_IMMEDIATE : SDE_CESTA_CTRL_REQ_PANIC_REGION;
-	cfg->hw_sleep_enable = !phys_enc->sde_kms->splash_data.num_splash_displays;
+	cfg->hw_sleep_enable = !(phys_enc->sde_kms->splash_data.num_splash_displays ||
+			disable_hw_sleep);
 
 	if ((phys_enc->split_role == DPU_MASTER_ENC_ROLE_MASTER)
 			|| (phys_enc->split_role == DPU_SLAVE_ENC_ROLE_MASTER))

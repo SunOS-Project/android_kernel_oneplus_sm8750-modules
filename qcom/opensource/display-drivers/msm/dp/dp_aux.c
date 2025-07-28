@@ -17,6 +17,11 @@
 #include "dp_hpd.h"
 #include "dp_debug.h"
 
+#ifdef OPLUS_FEATURE_DISPLAY
+#include <soc/oplus/system/oplus_project.h>
+extern unsigned int is_project(int project);
+#endif /* OPLUS_FEATURE_DISPLAY */
+
 #define DP_AUX_ENUM_STR(x)		#x
 #define DP_AUX_IPC_NUM_PAGES 10
 
@@ -919,6 +924,14 @@ struct dp_aux *dp_aux_get(struct device *dev, struct dp_catalog_aux *catalog,
 	dp_aux->abort = dp_aux_abort_transaction;
 	dp_aux->set_sim_mode = dp_aux_set_sim_mode;
 	dp_aux->ipc_log_context = ipc_log_context;
+
+#ifdef OPLUS_FEATURE_DISPLAY
+	if (is_project(24001) || is_project(24002) || is_project(24201)
+			|| is_project(24861)) {
+		DP_AUX_WARN(dp_aux, "this oplus project is not need dp_aux\n");
+		return dp_aux;
+	}
+#endif /* OPLUS_FEATURE_DISPLAY */
 
 	/*Condition to avoid allocating function pointers for aux bypass mode*/
 	if (switch_type != DP_AUX_SWITCH_BYPASS) {

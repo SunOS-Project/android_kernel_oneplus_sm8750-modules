@@ -1977,11 +1977,13 @@ void dsi_ctrl_hw_cmn_init_cmddma_trig_ctrl(struct dsi_ctrl_hw *ctrl,
 	reg = DSI_R32(ctrl, DSI_TRIG_CTRL);
 	reg &= ~BIT(16); /* Reset DMA_TRG_MUX */
 	reg &= ~(0xF | (0b111 << 17)); /* Reset DMA_TRIGGER_SEL */
-
-	if (do_peripheral_flush)
+	if (do_peripheral_flush) {
 		reg |= BIT(17); /* COMMAND_MODE_DMA_TRIGGER_SEL to periph flush from MDP */
-	else
+	} else if (cfg->force_dma_cmd_trigger) {
+		reg |= (trigger_map[cfg->force_dma_cmd_trigger] & 0xF);
+		SDE_EVT32(cfg->force_dma_cmd_trigger);
+	} else {
 		reg |= (trigger_map[cfg->dma_cmd_trigger] & 0xF);
-
+	}
 	DSI_W32(ctrl, DSI_TRIG_CTRL, reg);
 }

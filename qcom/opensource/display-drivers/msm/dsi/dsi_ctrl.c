@@ -24,6 +24,15 @@
 #include "sde_dbg.h"
 #include "sde_cesta.h"
 
+#ifdef OPLUS_FEATURE_DISPLAY
+#include <soc/oplus/system/oplus_mm_kevent_fb.h>
+#include "oplus_display_interface.h"
+#include "oplus_debug.h"
+#ifdef OPLUS_TRACKPOINT_REPORT
+#include <soc/oplus/oplus_trackpoint_report.h>
+#endif /* OPLUS_TRACKPOINT_REPORT */
+#endif /* OPLUS_FEATURE_DISPLAY */
+
 #define DSI_CTRL_DEFAULT_LABEL "MDSS DSI CTRL"
 
 #define DSI_CTRL_TX_TO_MS     1200
@@ -391,6 +400,10 @@ static void dsi_ctrl_dma_cmd_wait_for_done(struct dsi_ctrl *dsi_ctrl)
 	if (ret == 0 && !atomic_read(&dsi_ctrl->dma_irq_trig)) {
 		status = dsi_hw_ops.get_interrupt_status(&dsi_ctrl->hw);
 		if (status & mask) {
+#ifdef OPLUS_FEATURE_DISPLAY
+			EXCEPTION_TRACKPOINT_REPORT("DisplayDriverID@@%d$$dma_tx done but irq not triggered, status=%X, mask=%X\n",
+					OPLUS_DISP_Q_ERROR_DMA_IRQ_TRIGGER_FAIL, status, mask);
+#endif /* OPLUS_FEATURE_DISPLAY */
 			status |= (DSI_CMD_MODE_DMA_DONE | DSI_BTA_DONE);
 			dsi_hw_ops.clear_interrupt_status(&dsi_ctrl->hw,
 					status);
@@ -401,7 +414,14 @@ static void dsi_ctrl_dma_cmd_wait_for_done(struct dsi_ctrl *dsi_ctrl)
 			SDE_EVT32(dsi_ctrl->cell_index, SDE_EVTLOG_ERROR);
 			DSI_CTRL_ERR(dsi_ctrl,
 					"Command transfer failed\n");
+#ifdef OPLUS_FEATURE_DISPLAY
+			EXCEPTION_TRACKPOINT_REPORT("DisplayDriverID@@%d$$Command transfer failed, status=%X, mask=%X\n",
+					OPLUS_DISP_Q_ERROR_CMD_TRANS_FAIL, status, mask);
+#endif /* OPLUS_FEATURE_DISPLAY */
 		}
+#ifdef OPLUS_FEATURE_DISPLAY
+		oplus_sde_evtlog_dump_all();
+#endif /* OPLUS_FEATURE_DISPLAY */
 		dsi_ctrl_disable_status_interrupt(dsi_ctrl,
 					DSI_SINT_CMD_MODE_DMA_DONE);
 	}
@@ -651,6 +671,10 @@ bool dsi_ctrl_validate_host_state(struct dsi_ctrl *dsi_ctrl)
 
 	return true;
 }
+
+#ifdef OPLUS_FEATURE_DISPLAY
+EXPORT_SYMBOL(dsi_ctrl_validate_host_state);
+#endif /* OPLUS_FEATURE_DISPLAY */
 
 static void dsi_ctrl_update_state(struct dsi_ctrl *dsi_ctrl,
 				  enum dsi_ctrl_driver_ops op,
@@ -1237,6 +1261,10 @@ static int dsi_ctrl_enable_supplies(struct dsi_ctrl *dsi_ctrl, bool enable)
 		if (rc < 0) {
 			DSI_CTRL_ERR(dsi_ctrl, "failed to enable power resource %d\n", rc);
 			SDE_EVT32(rc, SDE_EVTLOG_ERROR);
+#ifdef OPLUS_FEATURE_DISPLAY
+			EXCEPTION_TRACKPOINT_REPORT("DisplayDriverID@@%d$$Power resource enable failed, rc=%d\n",
+					OPLUS_DISP_Q_ERROR_POWER_CHECK_FAIL, rc);
+#endif /* OPLUS_FEATURE_DISPLAY */
 			goto error;
 		}
 
@@ -1245,6 +1273,10 @@ static int dsi_ctrl_enable_supplies(struct dsi_ctrl *dsi_ctrl, bool enable)
 				&dsi_ctrl->pwr_info.host_pwr, true);
 			if (rc) {
 				DSI_CTRL_ERR(dsi_ctrl, "failed to enable host power regs\n");
+#ifdef OPLUS_FEATURE_DISPLAY
+				EXCEPTION_TRACKPOINT_REPORT("DisplayDriverID@@%d$$failed to enable host power regs\n",
+						OPLUS_DISP_Q_ERROR_POWER_CHECK_FAIL);
+#endif /* OPLUS_FEATURE_DISPLAY */
 				goto error_get_sync;
 			}
 		}
@@ -1607,6 +1639,11 @@ static int dsi_message_tx(struct dsi_ctrl *dsi_ctrl, struct dsi_cmd_desc *cmd_de
 
 	msg = &cmd_desc->msg;
 	flags = &cmd_desc->ctrl_flags;
+#ifdef OPLUS_FEATURE_DISPLAY
+	if (oplus_display_ops.dsi_message_tx_pre) {
+		oplus_display_ops.dsi_message_tx_pre(dsi_ctrl, cmd_desc);
+	}
+#endif /* OPLUS_FEATURE_DISPLAY */
 
 	/* Validate the mode before sending the command */
 	rc = dsi_message_validate_tx_mode(dsi_ctrl, msg->tx_len, flags);
@@ -1707,7 +1744,16 @@ static int dsi_message_tx(struct dsi_ctrl *dsi_ctrl, struct dsi_cmd_desc *cmd_de
 	}
 
 kickoff:
+#ifdef OPLUS_FEATURE_DISPLAY
+	OPLUS_DSI_DEBUG_DCS("dsi_cmd: kickoff, ctrl_flags=0x%02X, msg_flags=0x%02X",
+			*flags, msg->flags);
+#endif /* OPLUS_FEATURE_DISPLAY */
 	dsi_kickoff_msg_tx(dsi_ctrl, msg, &cmd, &cmd_mem, *flags, do_peripheral_flush);
+#ifdef OPLUS_FEATURE_DISPLAY
+	if (oplus_display_ops.dsi_message_tx_post) {
+		oplus_display_ops.dsi_message_tx_post(dsi_ctrl, cmd_desc);
+	}
+#endif /* OPLUS_FEATURE_DISPLAY */
 error:
 	if (buffer)
 		devm_kfree(&dsi_ctrl->pdev->dev, buffer);
@@ -3095,6 +3141,15 @@ void dsi_ctrl_enable_status_interrupt(struct dsi_ctrl *dsi_ctrl,
 		dsi_ctrl->hw.ops.enable_status_interrupts(&dsi_ctrl->hw,
 				dsi_ctrl->irq_info.irq_stat_mask);
 	}
+#ifdef OPLUS_FEATURE_DISPLAY
+	else {
+		if (intr_idx == DSI_SINT_CMD_MODE_DMA_DONE) {
+			SDE_EVT32(dsi_ctrl->cell_index, SDE_EVTLOG_ERROR);
+			DSI_WARN("maybe no add lock when send cmd to panel !!!\n");
+		}
+	}
+#endif
+
 
 	if (intr_idx == DSI_SINT_CMD_MODE_DMA_DONE)
 		dsi_ctrl->hw.ops.enable_status_interrupts(&dsi_ctrl->hw,
@@ -3959,6 +4014,22 @@ int dsi_ctrl_trigger_test_pattern(struct dsi_ctrl *dsi_ctrl)
 	mutex_unlock(&dsi_ctrl->ctrl_lock);
 
 	return ret;
+}
+
+int dsi_ctrl_override_dma_cmd_trig(struct dsi_ctrl *dsi_ctrl, enum dsi_trigger_type type)
+{
+	int rc = 0;
+
+	if (!dsi_ctrl || type == DSI_TRIGGER_MAX) {
+		DSI_CTRL_ERR(dsi_ctrl, "Invalid params\n");
+		return -EINVAL;
+	}
+
+	mutex_lock(&dsi_ctrl->ctrl_lock);
+	dsi_ctrl->host_config.common_config.force_dma_cmd_trigger = type;
+	mutex_unlock(&dsi_ctrl->ctrl_lock);
+
+	return rc;
 }
 
 /**

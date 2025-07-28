@@ -1346,6 +1346,37 @@ void sde_evtlog_dump_all(struct sde_dbg_evtlog *evtlog)
 
 }
 
+#ifdef OPLUS_FEATURE_DISPLAY
+void oplus_sde_evtlog_dump_all(void)
+{
+	struct sde_dbg_base *dbg_base = &sde_dbg_base;
+	u32 reg_dump_size;
+	u32 dump_mode_temp;
+
+	pr_err("oplus_sde_evtlog_dump_all entry\n");
+	SDE_EVT32(0x11, 0x22, 0x33);
+	SDE_EVT32(0x11, 0x22, 0x33);
+
+	mutex_lock(&dbg_base->mutex);
+
+	reg_dump_size =  _sde_dbg_get_reg_dump_size();
+	if (!dbg_base->reg_dump_base)
+		dbg_base->reg_dump_base = vzalloc(reg_dump_size);
+
+	dbg_base->reg_dump_addr =  dbg_base->reg_dump_base;
+	dump_mode_temp = dbg_base->evtlog->dump_mode;
+
+	if (sde_evtlog_is_enabled(dbg_base->evtlog, SDE_EVTLOG_ALWAYS)) {
+		dbg_base->evtlog->dump_mode = SDE_DBG_DUMP_IN_LOG;
+		sde_evtlog_dump_all(dbg_base->evtlog);
+		dbg_base->evtlog->dump_mode = dump_mode_temp;
+	}
+
+	mutex_unlock(&dbg_base->mutex);
+	pr_err("oplus_sde_evtlog_dump_all end\n");
+}
+#endif /* OPLUS_FEATURE_DISPLAY */
+
 /**
  * _sde_dump_array - dump array of register bases
  * @do_panic: whether to trigger a panic after dumping
@@ -1443,6 +1474,24 @@ static void _sde_dump_array(bool do_panic, const char *name, bool dump_secure, u
 
 	mutex_unlock(&dbg_base->mutex);
 }
+
+#ifdef OPLUS_FEATURE_APDMR
+void sde_dump_evtlog_and_reg(void)
+{
+	u32 old_dump_option = sde_dbg_base.dump_option;
+	u32 old_enable = sde_dbg_base.evtlog->enable;
+	u32 old_dump_mode = sde_dbg_base.evtlog->dump_mode;
+
+	sde_dbg_base.dump_option = SDE_DBG_DUMP_IN_LOG;
+	sde_dbg_base.evtlog->enable = SDE_EVTLOG_ALWAYS;
+	sde_dbg_base.evtlog->dump_mode = SDE_DBG_DUMP_IN_LOG;
+	_sde_dump_array(false, "sde", false, SDE_DBG_SDE);
+
+	sde_dbg_base.dump_option = old_dump_option;
+	sde_dbg_base.evtlog->enable = old_enable;
+	sde_dbg_base.evtlog->dump_mode = old_dump_mode;
+}
+#endif
 
 #ifdef CONFIG_DEV_COREDUMP
 #define MAX_BUFF_SIZE ((3072 - 256) * 1024)
@@ -1652,7 +1701,11 @@ void sde_dbg_ctrl(const char *name, ...)
  * @inode: debugfs inode
  * @file: file handle
  */
+#ifdef OPLUS_FEATURE_DISPLAY
+int sde_dbg_debugfs_open(struct inode *inode, struct file *file)
+#else /* OPLUS_FEATURE_DISPLAY */
 static int sde_dbg_debugfs_open(struct inode *inode, struct file *file)
+#endif /* OPLUS_FEATURE_DISPLAY */
 {
 	if (!inode || !file)
 		return -EINVAL;
@@ -1668,6 +1721,9 @@ static int sde_dbg_debugfs_open(struct inode *inode, struct file *file)
 	mutex_unlock(&sde_dbg_base.mutex);
 	return 0;
 }
+#ifdef OPLUS_FEATURE_DISPLAY
+EXPORT_SYMBOL(sde_dbg_debugfs_open);
+#endif /* OPLUS_FEATURE_DISPLAY */
 
 /*
  * sde_dbg_reg_base_open - debugfs open handler for reg base
@@ -1706,8 +1762,13 @@ static int sde_dbg_reg_base_open(struct inode *inode, struct file *file)
  * @count: size of user buffer
  * @ppos: position offset of user buffer
  */
+#ifdef OPLUS_FEATURE_DISPLAY
+ssize_t sde_evtlog_dump_read(struct file *file, char __user *buff,
+		size_t count, loff_t *ppos)
+#else /* OPLUS_FEATURE_DISPLAY */
 static ssize_t sde_evtlog_dump_read(struct file *file, char __user *buff,
 		size_t count, loff_t *ppos)
+#endif /* OPLUS_FEATURE_DISPLAY */
 {
 	ssize_t len = 0;
 	char evtlog_buf[SDE_EVTLOG_BUF_MAX];
@@ -1733,6 +1794,9 @@ static ssize_t sde_evtlog_dump_read(struct file *file, char __user *buff,
 
 	return len;
 }
+#ifdef OPLUS_FEATURE_DISPLAY
+EXPORT_SYMBOL(sde_evtlog_dump_read);
+#endif /* OPLUS_FEATURE_DISPLAY */
 
 /**
  * sde_evtlog_dump_write - debugfs write handler for evtlog dump

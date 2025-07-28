@@ -39,6 +39,10 @@
 #include "sde_vbif.h"
 #include "sde_plane.h"
 #include "sde_color_processing.h"
+#ifdef OPLUS_FEATURE_DISPLAY
+#include "oplus_display_sysfs_attrs.h"
+#include "oplus_debug.h"
+#endif /* OPLUS_FEATURE_DISPLAY */
 
 #define SDE_DEBUG_PLANE(pl, fmt, ...) SDE_DEBUG("plane%d " fmt,\
 		(pl) ? (pl)->base.base.id : -1, ##__VA_ARGS__)
@@ -718,6 +722,10 @@ int sde_plane_wait_input_fence(struct drm_plane *plane, uint32_t wait_ms, int *e
 		input_fence = pstate->input_fence;
 
 		if (input_fence) {
+#ifdef OPLUS_FEATURE_DISPLAY
+			// hack timeout for debug
+			wait_ms = 3000;
+#endif
 			prefix = sde_sync_get_name_prefix(input_fence);
 			rc = sde_sync_wait(input_fence, wait_ms, error_status);
 
@@ -728,6 +736,11 @@ int sde_plane_wait_input_fence(struct drm_plane *plane, uint32_t wait_ms, int *e
 						PLANE_PROP_INPUT_FENCE));
 				sde_kms_timeline_status(plane->dev);
 				ret = -ETIMEDOUT;
+#ifdef OPLUS_FEATURE_DISPLAY
+				oplus_sde_evtlog_dump_all();
+				EXCEPTION_TRACKPOINT_REPORT("DisplayDriverID@@%d$$fence timeout, wait_ms=%d\n",
+								OPLUS_DISP_Q_ERROR_FENCE_TIMEOUT, wait_ms);
+#endif
 				break;
 			case -ERESTARTSYS:
 				SDE_ERROR_PLANE(psde,
@@ -3731,6 +3744,9 @@ static void _sde_plane_update_properties(struct drm_plane *plane,
 	struct drm_plane_state *state;
 	struct sde_plane_state *pstate;
 	struct sde_kms *sde_kms = NULL;
+#ifdef OPLUS_FEATURE_DISPLAY
+	char tag_name[128];
+#endif
 
 	psde = to_sde_plane(plane);
 	state = plane->state;
@@ -3747,6 +3763,11 @@ static void _sde_plane_update_properties(struct drm_plane *plane,
 			DRMID(crtc), DRMID(plane));
 		return;
 	}
+
+#ifdef OPLUS_FEATURE_DISPLAY
+	snprintf(tag_name, sizeof(tag_name), "_sde_plane_update_properties pstate->dirty:0x%x", pstate->dirty);
+	OPLUS_DSI_TRACE_BEGIN(tag_name);
+#endif
 
 	fmt = to_sde_format(msm_fmt);
 	nplanes = fmt->num_planes;
@@ -3792,6 +3813,10 @@ static void _sde_plane_update_properties(struct drm_plane *plane,
 
 	/* clear dirty */
 	pstate->dirty = 0x0;
+
+#ifdef OPLUS_FEATURE_DISPLAY
+	OPLUS_DSI_TRACE_END(tag_name);
+#endif
 }
 
 static void _sde_plane_check_lut_dirty(struct sde_plane *psde,
