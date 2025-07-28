@@ -26,6 +26,14 @@
 #include <soc/snd_event.h>
 #include <dsp/audio_notifier.h>
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_FEEDBACK)
+#include "feedback/oplus_audio_kernel_fb.h"
+#ifdef dev_err_ratelimited
+#undef dev_err_ratelimited
+#define dev_err_ratelimited dev_err_ratelimited_fb_delay_no_dm
+#endif
+#endif /*CONFIG_OPLUS_FEATURE_MM_FEEDBACK*/
+
 #define APM_EVENT_MODULE_TO_CLIENT	0x03001000
 #define WAKELOCK_TIMEOUT 200
 
@@ -123,11 +131,19 @@ int gpr_send_pkt(struct gpr_device *adev, struct gpr_pkt *pkt)
 
 	if ((adev->domain_id == GPR_DOMAIN_ADSP) &&
 	    (gpr_get_q6_state() != GPR_SUBSYS_LOADED)) {
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_FEEDBACK)
+		dev_err_ratelimited_not_fb(gpr->dev, "%s: Still Dsp is not Up\n", __func__);
+#else /* CONFIG_OPLUS_FEATURE_MM_FEEDBACK */
 		dev_err_ratelimited(gpr->dev, "%s: Still Dsp is not Up\n", __func__);
+#endif /* CONFIG_OPLUS_FEATURE_MM_FEEDBACK */
 		return -ENETRESET;
 	} else if ((adev->domain_id == GPR_DOMAIN_MODEM) &&
 		   (gpr_get_modem_state() == GPR_SUBSYS_DOWN)) {
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_FEEDBACK)
+		dev_err_ratelimited_not_fb(gpr->dev, "%s: Still Modem is not Up\n", __func__);
+#else /* CONFIG_OPLUS_FEATURE_MM_FEEDBACK */
 		dev_err_ratelimited(gpr->dev, "%s: Still Modem is not Up\n", __func__);
+#endif /* CONFIG_OPLUS_FEATURE_MM_FEEDBACK */
 		return -ENETRESET;
 	}
 

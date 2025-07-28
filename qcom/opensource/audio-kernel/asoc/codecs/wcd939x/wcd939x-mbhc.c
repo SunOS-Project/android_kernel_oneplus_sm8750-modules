@@ -28,6 +28,22 @@
 #include <linux/soc/qcom/wcd939x-i2c.h>
 #endif
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_FEEDBACK)
+#include "feedback/oplus_audio_kernel_fb.h"
+#ifdef dev_err_ratelimited
+#undef dev_err_ratelimited
+#define dev_err_ratelimited dev_err_ratelimited_fb
+#endif
+#ifdef pr_err_ratelimited
+#undef pr_err_ratelimited
+#define pr_err_ratelimited pr_err_ratelimited_fb
+#endif
+#ifdef pr_err
+#undef pr_err
+#define pr_err pr_err_fb_delay
+#endif
+#endif /* CONFIG_OPLUS_FEATURE_MM_FEEDBACK */
+
 #define WCD939X_ZDET_SUPPORTED          true
 /* Z value defined in milliohm */
 #define WCD939X_ZDET_VAL_32             32000
@@ -2034,6 +2050,25 @@ static void wcd939x_mbhc_zdet_leakage_resistance(struct wcd_mbhc *mbhc,
 				0x80, 0x00); /* enable 1M pull-up */
 }
 
+#ifdef OPLUS_ARCH_EXTENDS
+/* workaround for mic mute or headset not detect issue after ESD. case07374404 */
+static void wcd939x_mbhc_check_corrupted(struct wcd_mbhc *mbhc)
+{
+	unsigned int reg = 0;
+
+	/* check WCD939X_BIAS to estimate if codec damage, ex: esd test */
+	reg = snd_soc_component_read(mbhc->component, WCD939X_BIAS);
+	if (reg != 0x80) {
+		snd_soc_component_update_bits(mbhc->component, WCD939X_BIAS, 0xFF, 0x80);
+		pr_err_ratelimited("%s: codec corrupted, reg: 0x%x \n", __func__, reg);
+		pr_info("%s: ssr_enable %d", __func__, mbhc->ssr_enable);
+		if (mbhc->ssr_enable) {
+			schedule_delayed_work(&mbhc->adsp_ssr_work, msecs_to_jiffies(10));
+		}
+	}
+}
+#endif /* OPLUS_ARCH_EXTENDS */
+
 static const struct wcd_mbhc_cb mbhc_cb = {
 	.request_irq = wcd939x_mbhc_request_irq,
 	.irq_control = wcd939x_mbhc_irq_control,
@@ -2061,6 +2096,10 @@ static const struct wcd_mbhc_cb mbhc_cb = {
 	.bcs_enable = wcd939x_mbhc_bcs_enable,
 	.surge_reset_routine = wcd939x_surge_reset_routine,
 	.zdet_leakage_resistance = wcd939x_mbhc_zdet_leakage_resistance,
+#ifdef OPLUS_ARCH_EXTENDS
+/* workaround for mic mute or headset not detect issue after ESD. case07374404 */
+	.check_corrupted = wcd939x_mbhc_check_corrupted,
+#endif /* OPLUS_ARCH_EXTENDS */
 };
 
 static int wcd939x_get_hph_type(struct snd_kcontrol *kcontrol,
@@ -2107,6 +2146,60 @@ static int wcd939x_hph_impedance_get(struct snd_kcontrol *kcontrol,
 
 	return 0;
 }
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_FEEDBACK)
+/* add for test audio-kernel err feedback and headphone detect err feedback*/
+static int wcd939x_set_feedback_control(struct snd_kcontrol *kcontrol,
+				   struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component =
+					snd_soc_kcontrol_component(kcontrol);
+	struct wcd939x_mbhc *wcd939x_mbhc = wcd939x_soc_get_mbhc(component);
+	struct wcd_mbhc *mbhc;
+
+	if (!wcd939x_mbhc) {
+		dev_err_ratelimited(component->dev, "%s: mbhc not initialized!\n", __func__);
+		return -EINVAL;
+	}
+
+	mbhc = &wcd939x_mbhc->wcd_mbhc;
+
+	mbhc->fb_ctl = ucontrol->value.integer.value[0];
+	pr_info("%s: set %u", __func__, mbhc->fb_ctl);
+
+	if (mbhc->fb_ctl & TEST_KERNEL_FEEDBACK_10047) {
+		pr_err("%s: just for test 10047, igonre", __func__);
+	}
+
+	return 0;
+}
+
+static int wcd939x_get_feedback_control(struct snd_kcontrol *kcontrol,
+						struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component =
+					snd_soc_kcontrol_component(kcontrol);
+	struct wcd939x_mbhc *wcd939x_mbhc = wcd939x_soc_get_mbhc(component);
+	struct wcd_mbhc *mbhc;
+
+	if (!wcd939x_mbhc) {
+		dev_err_ratelimited(component->dev, "%s: mbhc not initialized!\n", __func__);
+		return -EINVAL;
+	}
+
+	mbhc = &wcd939x_mbhc->wcd_mbhc;
+
+	ucontrol->value.integer.value[0] = mbhc->fb_ctl;
+	pr_info("%s: get %u", __func__, mbhc->fb_ctl);
+
+	return 0;
+}
+
+static const struct snd_kcontrol_new feedback_controls[] = {
+	SOC_SINGLE_EXT("FEEDBACK_CONTROL", SND_SOC_NOPM, 0, 0xff, 0,
+			wcd939x_get_feedback_control, wcd939x_set_feedback_control),
+};
+#endif /* CONFIG_OPLUS_FEATURE_MM_FEEDBACK */
 
 static const struct snd_kcontrol_new hph_type_detect_controls[] = {
 	SOC_SINGLE_EXT("HPH Type", 0, 0, UINT_MAX, 0,
@@ -2257,8 +2350,18 @@ int wcd939x_mbhc_post_ssr_init(struct wcd939x_mbhc *mbhc,
 	/* Reset detection type to insertion after SSR recovery */
 	snd_soc_component_update_bits(component, WCD939X_MBHC_MECH,
 				0x20, 0x20);
+#ifdef OPLUS_ARCH_EXTENDS
+/* Modify for headphone volume match to impedance */
+	if (wcd_mbhc->enable_hp_impedance_detect)
+		ret = wcd_mbhc_init(wcd_mbhc, component, &mbhc_cb, &intr_ids,
+					wcd_mbhc_registers, true);
+	else
+		ret = wcd_mbhc_init(wcd_mbhc, component, &mbhc_cb, &intr_ids,
+					wcd_mbhc_registers, false);
+#else /* OPLUS_ARCH_EXTENDS */
 	ret = wcd_mbhc_init(wcd_mbhc, component, &mbhc_cb, &intr_ids,
 			    wcd_mbhc_registers, WCD939X_ZDET_SUPPORTED);
+#endif /* OPLUS_ARCH_EXTENDS */
 	if (ret) {
 		dev_err(component->dev, "%s: mbhc initialization failed\n",
 			__func__);
@@ -2287,6 +2390,12 @@ int wcd939x_mbhc_init(struct wcd939x_mbhc **mbhc,
 	int ret = 0;
 	struct wcd939x_pdata *pdata;
 	struct wcd939x_priv *wcd939x;
+#ifdef OPLUS_ARCH_EXTENDS
+/* Add for headphone volume match to impedance */
+	u32 enable_hp_impedance_detect = 0;
+	int rc = 0;
+	const char *mbhc_enable_hp_impedance_detect = "oplus,mbhc_enable_hp_impedance_detect";
+#endif /* OPLUS_ARCH_EXTENDS */
 
 	if (!component) {
 		pr_err("%s: component is NULL\n", __func__);
@@ -2317,19 +2426,60 @@ int wcd939x_mbhc_init(struct wcd939x_mbhc **mbhc,
 
 	pdata = dev_get_platdata(component->dev);
 	if (!pdata) {
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_FEEDBACK)
+		dev_err_fb_fatal_delay(component->dev, "%s: pdata pointer is NULL\n", __func__);
+#else /* CONFIG_OPLUS_FEATURE_MM_FEEDBACK */
 		dev_err(component->dev, "%s: pdata pointer is NULL\n",
 			__func__);
+#endif /* CONFIG_OPLUS_FEATURE_MM_FEEDBACK */
 		ret = -EINVAL;
 		goto err;
 	}
 	wcd_mbhc->micb_mv = pdata->micbias.micb2_mv;
 
+#ifdef OPLUS_ARCH_EXTENDS
+/* Add for headphone volume match to impedance */
+	wcd_mbhc->enable_hp_impedance_detect = false;
+	if (of_find_property(component->dev->of_node, mbhc_enable_hp_impedance_detect, NULL)) {
+		rc = of_property_read_u32(component->dev->of_node, mbhc_enable_hp_impedance_detect, &enable_hp_impedance_detect);
+		if (!rc) {
+			if (enable_hp_impedance_detect) {
+				wcd_mbhc->enable_hp_impedance_detect= true;
+			} else {
+				wcd_mbhc->enable_hp_impedance_detect = false;
+			}
+		} else {
+			dev_info(component->dev, "%s: Looking up %s property in node %s failed\n",
+				__func__, mbhc_enable_hp_impedance_detect, component->dev->of_node->full_name);
+		}
+	} else {
+		dev_info(component->dev, "%s: %s DT property not found\n", __func__, mbhc_enable_hp_impedance_detect);
+	}
+	dev_info(component->dev, "%s:enable_hp_impedance_detect(%d)\n", __func__, wcd_mbhc->enable_hp_impedance_detect);
+#endif /* OPLUS_ARCH_EXTENDS */
+
+#ifdef OPLUS_ARCH_EXTENDS
+/* Modify for headphone volume match to impedance */
+	if (wcd_mbhc->enable_hp_impedance_detect)
+		ret = wcd_mbhc_init(wcd_mbhc, component, &mbhc_cb,
+					&intr_ids, wcd_mbhc_registers,
+					true);
+	else
+		ret = wcd_mbhc_init(wcd_mbhc, component, &mbhc_cb,
+					&intr_ids, wcd_mbhc_registers,
+					false);
+#else /* OPLUS_ARCH_EXTENDS */
 	ret = wcd_mbhc_init(wcd_mbhc, component, &mbhc_cb,
 				&intr_ids, wcd_mbhc_registers,
 				WCD939X_ZDET_SUPPORTED);
+#endif /* OPLUS_ARCH_EXTENDS */
 	if (ret) {
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_FEEDBACK)
+		dev_err_fb_fatal_delay(component->dev, "%s: mbhc initialization failed\n", __func__);
+#else /* CONFIG_OPLUS_FEATURE_MM_FEEDBACK */
 		dev_err(component->dev, "%s: mbhc initialization failed\n",
 			__func__);
+#endif /* CONFIG_OPLUS_FEATURE_MM_FEEDBACK */
 		goto err;
 	}
 
@@ -2338,6 +2488,12 @@ int wcd939x_mbhc_init(struct wcd939x_mbhc **mbhc,
 				   ARRAY_SIZE(impedance_detect_controls));
 	snd_soc_add_component_controls(component, hph_type_detect_controls,
 				   ARRAY_SIZE(hph_type_detect_controls));
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_FEEDBACK)
+/* add for test audio-kernel err feedback and headphone detect err feedback*/
+	snd_soc_add_component_controls(component, feedback_controls,
+				   ARRAY_SIZE(feedback_controls));
+#endif /* CONFIG_OPLUS_FEATURE_MM_FEEDBACK */
 
 	wcd939x = dev_get_drvdata(component->dev);
 	if (!wcd939x) {

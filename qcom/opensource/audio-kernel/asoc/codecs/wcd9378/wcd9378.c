@@ -27,6 +27,22 @@
 #include "internal.h"
 #include "asoc/bolero-slave-internal.h"
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_FEEDBACK)
+#include "feedback/oplus_audio_kernel_fb.h"
+#ifdef dev_err
+#undef dev_err
+#define dev_err dev_err_fb_delay
+#endif
+#ifdef dev_err_ratelimited
+#undef dev_err_ratelimited
+#define dev_err_ratelimited dev_err_ratelimited_fb_delay
+#endif
+#ifdef pr_err
+#undef pr_err
+#define pr_err pr_err_fb_delay
+#endif
+#endif /* CONFIG_OPLUS_FEATURE_MM_FEEDBACK */
+
 #define NUM_SWRS_DT_PARAMS 5
 
 #define WCD9378_MOBILE_MODE 0x01
@@ -2590,6 +2606,11 @@ static int wcd9378_event_notify(struct notifier_block *block,
 						NULL);
 		wcd9378->mbhc->wcd_mbhc.deinit_in_progress = true;
 		mbhc = &wcd9378->mbhc->wcd_mbhc;
+		#ifdef OPLUS_ARCH_EXTENDS
+		/* Add for fix headset not correct after ssr */
+		mbhc->plug_before_ssr = mbhc->current_plug;
+		pr_info("%s: mbhc->plug_before_ssr=%d\n", __func__, mbhc->plug_before_ssr);
+		#endif /* OPLUS_ARCH_EXTENDS */
 		wcd9378->usbc_hs_status = get_usbc_hs_status(component,
 						mbhc->mbhc_cfg);
 		wcd9378_mbhc_ssr_down(wcd9378->mbhc, component);
@@ -2908,7 +2929,7 @@ static int wcd9378_hph_get_gain(struct snd_kcontrol *kcontrol,
 	offset /= 0x180;
 	ucontrol->value.enumerated.item[0] = offset;
 
-	dev_dbg(component->dev, "%s： offset is 0x%0x\n", __func__, offset);
+	dev_dbg(component->dev, "%s: offset is 0x%0x\n", __func__, offset);
 	return 0;
 }
 
@@ -3424,6 +3445,183 @@ static const struct snd_kcontrol_new wcd9378_snd_controls[] = {
 	SOC_ENUM_EXT("DMIC5 ChMap", tx_master_ch_enum,
 			wcd9378_tx_master_ch_get, wcd9378_tx_master_ch_put),
 };
+
+#ifdef OPLUS_ARCH_EXTENDS
+/* add for wcd mic die test */
+const char * const die_crk_det_en_text[] = {"0x80", "0xC0"};
+const u8 det_en[] = {0x80, 0xC0};
+const char * const die_crk_det_int1_text[] = {"0xC2", "0x82", "0x42", "0x02"};
+const u8 det_int1[] = {0xC2, 0x82, 0x42, 0x02};
+const char * const die_crk_det_out_text[] = {"0x00"};
+
+static SOC_ENUM_SINGLE_EXT_DECL(die_crk_det_en_enum, die_crk_det_en_text);
+static SOC_ENUM_SINGLE_EXT_DECL(die_crk_det_int1_enum, die_crk_det_int1_text);
+static SOC_ENUM_SINGLE_EXT_DECL(die_crk_det_out_enum, die_crk_det_out_text);
+
+static int get_enum_index_from_reg(const u8 reg_array[], u8 array_num, u8 reg)
+{
+	u8 index = 0;
+
+	for (index = 0; index < array_num; index++) {
+		if (reg_array[index] == reg) {
+			return index;
+		}
+	}
+
+	return index;
+}
+
+static int wcd93xx_die_crk_det_en_put(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	u8 ctl_value = 0;
+	int ret = -1;
+	struct snd_soc_component *component = NULL;
+
+	if (!kcontrol) {
+		return -EINVAL;
+	}
+
+	component = snd_soc_kcontrol_component(kcontrol);
+	if (!component)
+		return -EINVAL;
+
+	if (ucontrol->value.enumerated.item[0] < ARRAY_SIZE(det_en)) {
+		ctl_value = det_en[ucontrol->value.enumerated.item[0]];
+		ret = snd_soc_component_update_bits(component,
+			WCD9378_DIE_CRACK_DIE_CRK_DET_EN, 0xFF, ctl_value);
+		dev_dbg(component->dev, "%s: det en update value %4x, return %d \n", __func__,ctl_value, ret);
+
+	} else {
+		dev_err(component->dev,
+			"%s: out of index ,please check your input value \n", __func__);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int wcd93xx_die_crk_det_en_get(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	u32 reg = 0;
+	struct snd_soc_component *component = NULL;
+	struct wcd9378_priv *wcd9378 = NULL;
+
+	if (!kcontrol) {
+		return -EINVAL;
+	}
+	component = snd_soc_kcontrol_component(kcontrol);
+
+	if (!component) {
+		return -EINVAL;
+	}
+	wcd9378 = snd_soc_component_get_drvdata(component);
+
+	if (!wcd9378 || !(wcd9378->regmap)) {
+		return -EINVAL;
+	}
+
+	regmap_read(wcd9378->regmap, WCD9378_DIE_CRACK_DIE_CRK_DET_EN, &reg);
+	dev_dbg(component->dev, "%04x:%04x\n", WCD9378_DIE_CRACK_DIE_CRK_DET_EN, reg);
+
+	ucontrol->value.enumerated.item[0] = get_enum_index_from_reg(det_en, ARRAY_SIZE(det_en), reg);
+
+	return 0;
+}
+
+static int wcd93xx_die_crk_det_int1_put(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	u8 ctl_value = 0;
+	int ret = -1;
+	struct snd_soc_component *component = NULL;
+
+	if (!kcontrol) {
+		return -EINVAL;
+	}
+	component = snd_soc_kcontrol_component(kcontrol);
+	if (!component)
+		return -EINVAL;
+
+	if (ucontrol->value.enumerated.item[0] < ARRAY_SIZE(det_int1)) {
+		ctl_value = det_int1[ucontrol->value.enumerated.item[0]];
+		ret = snd_soc_component_update_bits(component,
+			WCD9378_DIE_CRACK_INT_DIE_CRK_DET_INT1, 0xFF, ctl_value);
+		dev_dbg(component->dev, "%s: det int1 update value %4x, return %d \n", __func__,ctl_value, ret);
+	} else {
+		dev_err(component->dev,
+			"%s: out of index ,please check your input value \n", __func__);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int wcd93xx_die_crk_det_int1_get(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	u32 reg = 0;
+	struct snd_soc_component *component = NULL;
+	struct wcd9378_priv *wcd9378 = NULL;
+
+	if (!kcontrol) {
+		return -EINVAL;
+	}
+	component = snd_soc_kcontrol_component(kcontrol);
+
+	if (!component) {
+		return -EINVAL;
+	}
+	wcd9378 = snd_soc_component_get_drvdata(component);
+
+	if (!wcd9378 || !(wcd9378->regmap)) {
+		return -EINVAL;
+	}
+
+	regmap_read(wcd9378->regmap, WCD9378_DIE_CRACK_INT_DIE_CRK_DET_INT1, &reg);
+	dev_dbg(component->dev, "%04x:%04x\n", WCD9378_DIE_CRACK_INT_DIE_CRK_DET_INT1, reg);
+
+	ucontrol->value.enumerated.item[0] = get_enum_index_from_reg(det_int1, ARRAY_SIZE(det_int1), reg);
+
+	return 0;
+}
+
+static int wcd93xx_die_crk_det_out_get(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol )
+{
+	u32 reg = 0;
+	struct snd_soc_component *component = NULL;
+	struct wcd9378_priv *wcd9378 = NULL;
+
+	if (!kcontrol) {
+		return -EINVAL;
+	}
+	component = snd_soc_kcontrol_component(kcontrol);
+
+	if (!component) {
+		return -EINVAL;
+	}
+	wcd9378 = snd_soc_component_get_drvdata(component);
+
+	if (!wcd9378 || !(wcd9378->regmap)) {
+		return -EINVAL;
+	}
+
+	regmap_read(wcd9378->regmap, WCD9378_DIE_CRACK_DIE_CRK_DET_OUT, &reg);
+	dev_dbg(component->dev, "%04x:%04x\n", WCD9378_DIE_CRACK_DIE_CRK_DET_OUT, reg);
+
+	ucontrol->value.enumerated.item[0] = reg;
+
+	return 0;
+}
+
+static const struct snd_kcontrol_new tx_die_crk_det_control[] = {
+	SOC_ENUM_EXT("DIE_CRK_DET_EN", die_crk_det_en_enum, wcd93xx_die_crk_det_en_get, wcd93xx_die_crk_det_en_put),
+	SOC_ENUM_EXT("DIE_CRK_DET_INT1", die_crk_det_int1_enum, wcd93xx_die_crk_det_int1_get, wcd93xx_die_crk_det_int1_put),
+	SOC_ENUM_EXT("DIE_CRK_DET_OUT", die_crk_det_out_enum, wcd93xx_die_crk_det_out_get, NULL),
+};
+#endif
 
 static const struct snd_kcontrol_new amic1_switch[] = {
 	SOC_DAPM_SINGLE("Switch", SND_SOC_NOPM, 0, 1, 0)
@@ -4121,7 +4319,15 @@ static int wcd9378_soc_codec_probe(struct snd_soc_component *component)
 	wcd9378_init_reg(component);
 
 	wcd9378_micb_value_convert(component);
-
+	#ifdef OPLUS_ARCH_EXTENDS
+	/* add for wcd mic die test */
+	ret = snd_soc_add_component_controls(component, tx_die_crk_det_control,
+		ARRAY_SIZE(tx_die_crk_det_control));
+	if (ret < 0) {
+		dev_err(component->dev,
+			"%s: Failed to add snd ctrls for tx die crk det control\n", __func__);
+	}
+	#endif
 	wcd9378->version = WCD9378_VERSION_1_0;
        /* Register event notifier */
 	wcd9378->nblock.notifier_call = wcd9378_event_notify;
@@ -4455,8 +4661,13 @@ static int wcd9378_bind(struct device *dev)
 		goto err;
 	}
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_FEEDBACK)
+	dev_err_not_fb(wcd9378->dev, "%s: wcd irq init done\n",
+			__func__);
+#else
 	dev_err(wcd9378->dev, "%s: wcd irq init done\n",
 			__func__);
+#endif
 	wcd9378->tx_swr_dev->slave_irq = wcd9378->virq;
 
 	/* Request for watchdog interrupt */

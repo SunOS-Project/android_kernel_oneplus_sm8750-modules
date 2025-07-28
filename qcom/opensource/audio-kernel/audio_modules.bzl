@@ -49,7 +49,11 @@ audio_modules.register(
     name = "audpkt_ion_dlkm",
     path = DSP_PATH,
     config_option = "CONFIG_AUDIO_PKT_ION",
-    srcs = ["msm_audio_ion.c"]
+    srcs = ["msm_audio_ion.c"],
+# Add for oplus_daemon_adsp_ssr dependency
+    deps = [
+        ":%b_oplus_audio_daemon",
+    ],
 )
 audio_modules.register(
     name = "q6_notifier_dlkm",
@@ -78,6 +82,8 @@ audio_modules.register(
     deps = [":%b_spf_core_dlkm",
             ":%b_gpr_dlkm",
             ":%b_q6_notifier_dlkm",
+# Add for oplus_daemon_adsp_ssr dependency
+            ":%b_oplus_audio_daemon",
 	],
 )
 audio_modules.register(
@@ -104,6 +110,8 @@ audio_modules.register(
     deps = [":%b_spf_core_dlkm",
             ":%b_gpr_dlkm",
             ":%b_audpkt_ion_dlkm",
+# Add for oplus_daemon_adsp_ssr dependency
+            ":%b_oplus_audio_daemon",
 	],
 )
 # >>>> SOC MODULES <<<<
@@ -141,6 +149,9 @@ audio_modules.register(
             ":%b_q6_notifier_dlkm",
             ":%b_snd_event_dlkm",
             ":%b_swr_dlkm",
+# Add for oplus_daemon_adsp_ssr dependency
+            ":%b_adsp_loader_dlkm",
+            ":%b_oplus_audio_daemon",
 	],
 )
 audio_modules.register(
@@ -218,6 +229,12 @@ audio_modules.register(
             ":%b_wsa884x_dlkm",
             ":%b_snd_event_dlkm",
             ":%b_wcd9378_dlkm",
+# Add for extend_codec_i2s_be_dailinks dependency
+            ":%b_oplus_audio_extend",
+            ":%b_oplus_audio_daemon",
+            ":oplus_speaker_headers",
+            ":%b_oplus_audio_pa_manager",
+            ":%b_oplus_audio_netlink",
 	],
 )
 # >>>> ASOC/CODEC MODULES <<<<
@@ -262,6 +279,9 @@ audio_modules.register(
             "wcd-mbhc-legacy.c"
         ]
     },
+# Add for oplus_daemon_adsp_ssr dependency
+    deps = [":%b_adsp_loader_dlkm",
+    ],
 )
 audio_modules.register(
     name = "swr_dmic_dlkm",
@@ -485,6 +505,9 @@ audio_modules.register(
         "wcd937x-tables.c",
         "wcd937x-mbhc.c",
     ],
+# Add for oplus_daemon_adsp_ssr dependency
+    deps = [":%b_oplus_audio_daemon",
+    ],
 )
 audio_modules.register(
     name = "wcd937x_slave_dlkm",
@@ -507,6 +530,8 @@ audio_modules.register(
             ":%b_mbhc_dlkm",
             ":%b_wcd_core_dlkm",
             ":%b_swr_dlkm",
+# Add for oplus_daemon_adsp_ssr dependency
+            ":%b_oplus_audio_daemon",
 	],
 )
 audio_modules.register(
@@ -534,6 +559,8 @@ audio_modules.register(
             ":%b_wcd939x_slave_dlkm",
             ":%b_wcd9xxx_dlkm",
             ":%b_mbhc_dlkm",
+# Add for oplus_daemon_adsp_ssr dependency
+            ":%b_oplus_audio_daemon",
 	],
 )
 audio_modules.register(
@@ -559,6 +586,8 @@ audio_modules.register(
             ":%b_wcd_core_dlkm",
             ":%b_wcd9xxx_dlkm",
             ":%b_swr_dlkm",
+# Add for oplus_daemon_adsp_ssr dependency
+            ":%b_oplus_audio_daemon",
 	],
 )
 audio_modules.register(
@@ -581,3 +610,106 @@ audio_modules.register(
     deps = [":%b_swr_dlkm",
 	],
 )
+
+#ifdef OPLUS_ARCH_EXTENDS
+#add for oplus audio driver
+# >>>>  oplus audio extend MODULES <<<<
+audio_modules.register(
+    name = "oplus_audio_extend",
+    path = "oplus/qcom",
+    config_option = "CONFIG_AUDIO_EXTEND_DRV",
+    srcs = [
+        "audio_extend_drv.c",
+    ]
+)
+# >>>>  AW88XXX PA MODULES <<<<
+audio_modules.register(
+    name = "oplus_audio_aw882xx",
+    path = "oplus/codecs/aw882xx",
+    config_option = "CONFIG_SND_SOC_AW882XX",
+    srcs = [
+        "aw882xx_bin_parse.c",
+        "aw882xx_calib.c",
+        "aw882xx_device.c",
+        "aw882xx_dsp.c",
+        "aw882xx_init.c",
+        "aw882xx_monitor.c",
+        "aw882xx_spin.c",
+        "aw882xx.c",
+    ],
+    deps = [":aw882xx_headers"],
+)
+audio_modules.register(
+    name = "oplus_audio_tfa98xx_v6",
+    path = "oplus/codecs/tfa98xx-v6",
+    config_option = "CONFIG_SND_SOC_TFA98XX",
+    srcs = [
+        "tfa_container_v6.c",
+        "tfa98xx_v6.c",
+        "tfa_dsp_v6.c",
+        "tfa_init_v6.c",
+    ],
+    deps = [":tfa98xx_headers"],
+)
+audio_modules.register(
+    name = "oplus_audio_sipa",
+    path = "oplus/codecs/sipa",
+    config_option = "CONFIG_SND_SOC_SIPA",
+    srcs = [
+        "sipa.c",
+        "sipa_regmap.c",
+        "sipa_aux_dev_if.c",
+        "sipa_91xx.c",
+        "sipa_parameter.c",
+    ],
+    deps = [":sipa_headers",
+            ":oplus_speaker_headers",
+            ":%b_oplus_audio_pa_manager",
+    ],
+)
+audio_modules.register(
+    name = "oplus_audio_sipa_tuning",
+    path = "oplus/codecs/sipa",
+    config_option = "CONFIG_SND_SOC_SIPA_TUNING",
+    srcs = [
+        "sipa_tuning_misc.c",
+        "sipa_tuning_if.c",
+    ],
+    deps = [":sipa_headers",
+            ":%b_oplus_audio_sipa",
+           ],
+)
+audio_modules.register(
+    name = "oplus_audio_pa_manager",
+    path = "oplus/qcom/oplus_speaker_manager",
+    config_option = "CONFIG_SND_SOC_OPLUS_PA_MANAGER",
+    srcs = [
+        "oplus_speaker_manager.c",
+        "oplus_speaker_manager_codec.c",
+    ],
+    deps = [":oplus_speaker_headers"],
+)
+# add for oplus audio daemon kernel
+# >>>>  oplus audio daemon kernel MODULES <<<<
+audio_modules.register(
+    name = "oplus_audio_daemon",
+    path = "oplus/oplus_audio_daemon",
+    config_option = "CONFIG_AUDIO_DAEMON_KERNEL_QCOM",
+    srcs = [
+        "oplus_audio_daemon_kernel.c",
+    ],
+    deps = [":%b_adsp_loader_dlkm",
+    ],
+)
+# add for oplus audio netlink kernel communication
+# >>>>  oplus audio netlink kernel MODULES <<<<
+audio_modules.register(
+    name = "oplus_audio_netlink",
+    path = "oplus/oplus_audio_netlink",
+    config_option = "CONFIG_AUDIO_NETLINK_KERNEL",
+    srcs = [
+        "oplus_audio_netlink_kernel.c",
+    ],
+    deps = [":audio_netlink_headers"],
+)
+#endif /* OPLUS_ARCH_EXTENDS */

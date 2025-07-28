@@ -585,6 +585,12 @@ static bool wcd939x_volatile_register(struct device *dev, unsigned int reg)
 	if (reg <= WCD939X_BASE + 1)
 		return 0;
 
+#ifdef OPLUS_ARCH_EXTENDS
+/* workAround for mic mute after ESD. case07374404 */
+	if (reg == WCD939X_BIAS)
+		return 1;
+#endif /* OPLUS_ARCH_EXTENDS */
+
 	return ((wcd939x_reg_access[WCD939X_REG(reg)] & RD_REG) &&
 		!(wcd939x_reg_access[WCD939X_REG(reg)] & WR_REG));
 }
