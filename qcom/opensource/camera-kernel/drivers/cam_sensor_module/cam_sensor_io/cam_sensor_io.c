@@ -8,6 +8,9 @@
 #include "cam_sensor_i2c.h"
 #include "cam_sensor_i3c.h"
 #include <linux/pm_runtime.h>
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+#include "cam_trace.h"
+#endif
 
 int32_t camera_io_dev_poll(struct camera_io_master *io_master_info,
 	uint32_t addr, uint16_t data, uint32_t data_mask,
@@ -112,6 +115,9 @@ int32_t camera_io_dev_read(struct camera_io_master *io_master_info,
 
 	return -EINVAL;
 }
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+EXPORT_SYMBOL(camera_io_dev_read);
+#endif
 
 int32_t camera_io_dev_read_seq(struct camera_io_master *io_master_info,
 	uint32_t addr, uint8_t *data,
@@ -144,10 +150,17 @@ int32_t camera_io_dev_read_seq(struct camera_io_master *io_master_info,
 
 	return -EINVAL;
 }
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+EXPORT_SYMBOL(camera_io_dev_read_seq);
+#endif
 
 int32_t camera_io_dev_write(struct camera_io_master *io_master_info,
 	struct cam_sensor_i2c_reg_setting *write_setting)
 {
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	//char trace[64] = {0};
+	int32_t ret = 0;
+#endif
 	if (!write_setting || !io_master_info) {
 		CAM_ERR(CAM_SENSOR_IO,
 			"Input parameters not valid ws: %pK ioinfo: %pK",
@@ -159,7 +172,26 @@ int32_t camera_io_dev_write(struct camera_io_master *io_master_info,
 		CAM_ERR(CAM_SENSOR_IO, "Invalid Register Settings");
 		return -EINVAL;
 	}
-
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	switch (io_master_info->master_type) {
+	case CCI_MASTER:
+		//trace_begin("KMD %d_%d_0x%x CCI Write[%u]", io_master_info->cci_client->cci_device, io_master_info->cci_client->cci_i2c_master, io_master_info->cci_client->sid*2, write_setting->size);
+		ret = cam_cci_i2c_write_table(io_master_info, write_setting);
+		//trace_end();
+		return ret;
+	case I2C_MASTER:
+		//trace_begin("KMD 0x%x I2C Write[%u]", io_master_info->client->addr, write_setting->size);
+		ret = cam_qup_i2c_write_table(io_master_info, write_setting);
+		//trace_end();
+		return ret;
+	case SPI_MASTER:
+		return cam_spi_write_table(io_master_info, write_setting);
+	case I3C_MASTER:
+		return cam_qup_i3c_write_table(io_master_info, write_setting);
+	default:
+		CAM_ERR(CAM_SENSOR, "Invalid Master Type:%d", io_master_info->master_type);
+	}
+#else
 	switch (io_master_info->master_type) {
 	case CCI_MASTER:
 		return cam_cci_i2c_write_table(io_master_info, write_setting);
@@ -172,14 +204,21 @@ int32_t camera_io_dev_write(struct camera_io_master *io_master_info,
 	default:
 		CAM_ERR(CAM_SENSOR_IO, "Invalid Master Type:%d", io_master_info->master_type);
 	}
-
+#endif
 	return -EINVAL;
 }
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+EXPORT_SYMBOL(camera_io_dev_write);
+#endif
 
 int32_t camera_io_dev_write_continuous(struct camera_io_master *io_master_info,
 	struct cam_sensor_i2c_reg_setting *write_setting,
 	uint8_t cam_sensor_i2c_write_flag)
 {
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	//char trace[64] = {0};
+	int32_t ret = 0;
+#endif
 	if (!write_setting || !io_master_info) {
 		CAM_ERR(CAM_SENSOR_IO,
 			"Input parameters not valid ws: %pK ioinfo: %pK",
@@ -191,7 +230,29 @@ int32_t camera_io_dev_write_continuous(struct camera_io_master *io_master_info,
 		CAM_ERR(CAM_SENSOR_IO, "Invalid Register Settings");
 		return -EINVAL;
 	}
-
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	switch (io_master_info->master_type) {
+	case CCI_MASTER:
+		//trace_begin("KMD %d_%d_0x%x Continuous CCI Write[%u]", io_master_info->cci_client->cci_device, io_master_info->cci_client->cci_i2c_master, io_master_info->cci_client->sid*2, write_setting->size);
+		ret = cam_cci_i2c_write_continuous_table(io_master_info,
+			write_setting, cam_sensor_i2c_write_flag);
+		//trace_end();
+		return ret;
+	case I2C_MASTER:
+		//trace_begin("KMD 0x%x Continuous I2C Write", io_master_info->client->addr, write_setting->size);
+		ret = cam_qup_i2c_write_continuous_table(io_master_info,
+			write_setting, cam_sensor_i2c_write_flag);
+		//trace_end();
+		return ret;
+	case SPI_MASTER:
+		return cam_spi_write_table(io_master_info, write_setting);
+	case I3C_MASTER:
+		return cam_qup_i3c_write_continuous_table(io_master_info,
+			write_setting, cam_sensor_i2c_write_flag);
+	default:
+		CAM_ERR(CAM_SENSOR, "Invalid Master Type:%d", io_master_info->master_type);
+	}
+#else
 	switch (io_master_info->master_type) {
 	case CCI_MASTER:
 		return cam_cci_i2c_write_continuous_table(io_master_info,
@@ -207,9 +268,12 @@ int32_t camera_io_dev_write_continuous(struct camera_io_master *io_master_info,
 	default:
 		CAM_ERR(CAM_SENSOR_IO, "Invalid Master Type:%d", io_master_info->master_type);
 	}
-
+#endif
 	return -EINVAL;
 }
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+EXPORT_SYMBOL(camera_io_dev_write_continuous);
+#endif
 
 int32_t camera_io_init(struct camera_io_master *io_master_info)
 {
@@ -289,6 +353,9 @@ int32_t camera_io_init(struct camera_io_master *io_master_info)
 
 	return -EINVAL;
 }
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+EXPORT_SYMBOL(camera_io_init);
+#endif
 
 int32_t camera_io_release(struct camera_io_master *io_master_info)
 {
@@ -336,3 +403,6 @@ int32_t camera_io_release(struct camera_io_master *io_master_info)
 
 	return -EINVAL;
 }
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+EXPORT_SYMBOL(camera_io_release);
+#endif

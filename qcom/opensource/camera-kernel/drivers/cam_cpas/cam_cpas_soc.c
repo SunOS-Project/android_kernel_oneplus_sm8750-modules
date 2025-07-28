@@ -1745,7 +1745,6 @@ parse_ahb_table:
 	}
 
 	rc = of_property_read_u32(of_node, "enable-cam-drv", &cam_drv_en_mask_val);
-
 	if (!rc) {
 		if (cam_drv_en_mask_val & CAM_DDR_DRV)
 			soc_private->enable_cam_ddr_drv = true;
@@ -2027,8 +2026,11 @@ int cam_cpas_soc_enable_resources(struct cam_hw_soc_info *soc_info,
 
 	rc = cam_soc_util_enable_platform_resource(soc_info, CAM_CLK_SW_CLIENT_IDX, true,
 		default_level, true);
-	if (rc)
+	if (rc) {
 		CAM_ERR(CAM_CPAS, "enable platform resource failed, rc=%d", rc);
+	} else {
+		CAM_INFO(CAM_CPAS, "CPAS enable platform resource successfully");
+	}
 
 	return rc;
 }
@@ -2040,8 +2042,11 @@ int cam_cpas_soc_disable_resources(struct cam_hw_soc_info *soc_info,
 
 	rc = cam_soc_util_disable_platform_resource(soc_info, CAM_CLK_SW_CLIENT_IDX,
 		disable_clocks, disable_irq);
-	if (rc)
+	if (rc) {
 		CAM_ERR(CAM_CPAS, "disable platform failed, rc=%d", rc);
+	} else {
+		CAM_INFO(CAM_CPAS, "CPAS disable platform resource successfully");
+	}
 
 	return rc;
 }

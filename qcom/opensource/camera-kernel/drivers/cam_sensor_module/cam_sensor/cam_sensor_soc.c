@@ -13,6 +13,9 @@
 #include "cam_sensor_soc.h"
 #include "cam_soc_util.h"
 #include "cam_mem_mgr_api.h"
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+#include "oplus_cam_sensor.h"
+#endif
 
 int32_t cam_sensor_get_sub_module_index(struct device_node *of_node,
 	struct cam_sensor_board_info *s_info)
@@ -138,7 +141,9 @@ static int32_t cam_sensor_driver_get_dt_data(struct cam_sensor_ctrl_t *s_ctrl)
 	struct device_node *of_node = s_ctrl->of_node;
 	struct device_node *of_parent = NULL;
 	struct cam_hw_soc_info *soc_info = &s_ctrl->soc_info;
-
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	oplus_sensor_sony_get_vsync_data(of_node,&s_ctrl->vsync_info);
+#endif
 	s_ctrl->sensordata = CAM_MEM_ZALLOC(sizeof(*sensordata), GFP_KERNEL);
 	if (!s_ctrl->sensordata)
 		return -ENOMEM;

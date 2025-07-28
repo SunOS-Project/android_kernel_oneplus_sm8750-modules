@@ -37,7 +37,11 @@
 #define CAM_SYNC_OBJ_NAME_LEN           64
 #define CAM_SYNC_MAX_OBJS               2048
 #define CAM_GENERIC_FENCE_BATCH_MAX     10
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+#define CAM_SYNC_MAX_V4L2_EVENTS        300
+#else
 #define CAM_SYNC_MAX_V4L2_EVENTS        250
+#endif
 #define CAM_SYNC_DEBUG_FILENAME         "cam_debug"
 #define CAM_SYNC_DEBUG_BASEDIR          "cam"
 #define CAM_SYNC_DEBUG_BUF_SIZE         32

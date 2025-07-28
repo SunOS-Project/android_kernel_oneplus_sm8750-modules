@@ -449,6 +449,11 @@ TRACE_EVENT(cam_perf,
 		__get_str(entity), __get_str(msg), __entry->value
 	)
 );
+
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+#include <cam_trace_custom.h>
+#endif
+
 #endif /* _CAM_TRACE_H */
 
 /* This part must be outside protection */

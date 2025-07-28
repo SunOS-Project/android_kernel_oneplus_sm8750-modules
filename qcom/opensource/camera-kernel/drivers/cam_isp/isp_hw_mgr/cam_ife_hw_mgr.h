@@ -471,6 +471,15 @@ struct cam_ife_hw_mgr_ctx {
 	struct cam_isp_hw_per_req_info             per_req_info[MAX_DRV_REQUEST_DEPTH];
 	uint8_t                                    wr_per_req_index;
 	bool                                       is_init_drv_cfg_received;
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	uint64_t                                   rdi0_sof_timestamp;
+	uint64_t                                   rdi0_eof_timestamp;
+	uint64_t                                   rdi1_sof_timestamp;
+	uint64_t                                   active_frame_duration;
+	uint64_t                                   sof_to_sof;
+	uint32_t                                   error_cnt_after_recovery;
+#endif
+
 };
 
 /**

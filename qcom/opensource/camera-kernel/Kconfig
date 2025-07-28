@@ -102,6 +102,11 @@ config SECURE_CAMERA_25
 		buffers for the secure camera images by
 		lending the buffers to a trusted virtual machine.
 
+config SPECTRA_OPLUS
+	bool "enable oplus camera src files"
+	help
+		This config enables oplus camera src files
+
 config SPECTRA_SECURE_DYN_PORT_CFG
 	bool "enable dynamic port config feature"
 	help

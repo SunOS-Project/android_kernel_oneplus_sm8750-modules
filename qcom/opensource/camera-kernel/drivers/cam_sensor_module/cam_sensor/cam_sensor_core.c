@@ -17,6 +17,15 @@
 #define CAM_SENSOR_PIPELINE_DELAY_MASK        0xFF
 #define CAM_SENSOR_MODESWITCH_DELAY_SHIFT     8
 #define CAM_SENSOR_MAX_PER_REQ_SETTINGS       4
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+#include "oplus_cam_sensor.h"
+#include <cam_kevent_fb_custom.h>
+#define STREAMOFF_RETRYNUM 15
+bool chip_version_old = FALSE;
+
+#endif
+
+#define CAM_SENSOR_MAX_PER_REQ_SETTINGS       4
 
 extern struct completion *cam_sensor_get_i3c_completion(uint32_t index);
 
@@ -425,6 +434,38 @@ static int32_t cam_sensor_pkt_parse(struct cam_sensor_ctrl_t *s_ctrl,
 		i2c_reg_settings->is_settings_valid = 1;
 		break;
 	}
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	case CAM_SENSOR_PACKET_OPCODE_SENSOR_RESOLUTION: {
+		i2c_reg_settings = &i2c_data->resolution_settings;
+		i2c_reg_settings->request_id = 0;
+		i2c_reg_settings->is_settings_valid = 1;
+		break;
+	}
+	case CAM_SENSOR_PACKET_OPCODE_SENSOR_QSC: {
+		i2c_reg_settings = &i2c_data->qsc_settings;
+		i2c_reg_settings->request_id = 0;
+		i2c_reg_settings->is_settings_valid = 1;
+		break;
+	}
+	case CAM_SENSOR_PACKET_OPCODE_SENSOR_LSC: {
+		i2c_reg_settings = &i2c_data->lsc_settings;
+		i2c_reg_settings->request_id = 0;
+		i2c_reg_settings->is_settings_valid = 1;
+		break;
+	}
+	case CAM_SENSOR_PACKET_OPCODE_SENSOR_AWBOTP: {
+		i2c_reg_settings = &i2c_data->awbotp_settings;
+		i2c_reg_settings->request_id = 0;
+		i2c_reg_settings->is_settings_valid = 1;
+		break;
+	}
+	case CAM_SENSOR_PACKET_OPCODE_SENSOR_SPC: {
+		i2c_reg_settings = &i2c_data->spc_settings;
+		i2c_reg_settings->request_id = 0;
+		i2c_reg_settings->is_settings_valid = 1;
+		break;
+	}
+#endif
 	case CAM_SENSOR_PACKET_OPCODE_SENSOR_CONFIG: {
 		i2c_reg_settings = &i2c_data->config_settings;
 		i2c_reg_settings->request_id = 0;
@@ -436,7 +477,6 @@ static int32_t cam_sensor_pkt_parse(struct cam_sensor_ctrl_t *s_ctrl,
 			delete_request(&i2c_data->streamon_settings);
 			s_ctrl->streamon_count = 0;
 		}
-
 		s_ctrl->streamon_count = s_ctrl->streamon_count + 1;
 		i2c_reg_settings = &i2c_data->streamon_settings;
 		i2c_reg_settings->request_id = 0;
@@ -491,30 +531,49 @@ static int32_t cam_sensor_pkt_parse(struct cam_sensor_ctrl_t *s_ctrl,
 		CAM_DBG(CAM_SENSOR, "Received Packet: %lld req: %lld",
 			csl_packet->header.request_id % MAX_PER_FRAME_ARRAY,
 			csl_packet->header.request_id);
-		if (i2c_reg_settings->is_settings_valid == 1) {
-			//Need to clean the previous i2c settings here
-			i2c_set_per_req[0] = &i2c_data->per_frame[csl_packet->header.request_id %
-				MAX_PER_FRAME_ARRAY];
-			i2c_set_per_req[1] = &i2c_data->deferred_frame_update[csl_packet->header.request_id %
-				MAX_PER_FRAME_ARRAY];
-			i2c_set_per_req[2] = &i2c_data->frame_skip[csl_packet->header.request_id %
-				MAX_PER_FRAME_ARRAY];
-			i2c_set_per_req[3] = &i2c_data->bubble_update[csl_packet->header.request_id %
-				MAX_PER_FRAME_ARRAY];
+ 		if (i2c_reg_settings->is_settings_valid == 1) {
+			//we need to clean the previous i2c settings
+			if (csl_packet->header.request_id >= (i2c_reg_settings->request_id + MAX_PER_FRAME_ARRAY)) {
+				i2c_set_per_req[0] = &i2c_data->per_frame[csl_packet->header.request_id %
+					MAX_PER_FRAME_ARRAY];
+				i2c_set_per_req[1] = &i2c_data->deferred_frame_update[csl_packet->header.request_id %
+					MAX_PER_FRAME_ARRAY];
+				i2c_set_per_req[2] = &i2c_data->frame_skip[csl_packet->header.request_id %
+					MAX_PER_FRAME_ARRAY];
+				i2c_set_per_req[3] = &i2c_data->bubble_update[csl_packet->header.request_id %
+					MAX_PER_FRAME_ARRAY];
 
-			for (i = 0; i < CAM_SENSOR_MAX_PER_REQ_SETTINGS; i++) {
-				CAM_DBG(CAM_SENSOR, "setting list idx:%d, request_id:%lld, is_settings_valid:%d",
-					i, i2c_set_per_req[i]->request_id, i2c_set_per_req[i]->is_settings_valid);
-				if ((i2c_set_per_req[i]->request_id) &&
-					(i2c_set_per_req[i]->is_settings_valid == 1)) {
-						i2c_set_per_req[i]->request_id = 0;
-						rc = delete_request(i2c_set_per_req[i]);
-						if (rc < 0)
-							CAM_ERR(CAM_SENSOR, "Delete request Failed during parse pkt rc:%d", rc);
+				for (i = 0; i < CAM_SENSOR_MAX_PER_REQ_SETTINGS; i++) {
+					CAM_INFO(CAM_SENSOR, "list type:%d, request_id:%lld, is_settings_valid:%d",
+						i, i2c_set_per_req[i]->request_id, i2c_set_per_req[i]->is_settings_valid);
+					if ((i2c_set_per_req[i]->request_id) &&
+						(i2c_set_per_req[i]->is_settings_valid == 1)) {
+							CAM_INFO(CAM_SENSOR, "Delete request in parse pkt: %lld", i2c_set_per_req[i]->request_id);
+							i2c_set_per_req[i]->request_id = 0;
+							rc = delete_request(i2c_set_per_req[i]);
+							if (rc < 0)
+								CAM_ERR(CAM_SENSOR, "Delete request Failed in parse pkt rc:%d", rc);
+					}
 				}
+
+			} else {
+ 				CAM_ERR(CAM_SENSOR,
+					"Already some pkt in offset req : %lld",
+					csl_packet->header.request_id);
+				/*
+				 * Update req mgr even in case of failure.
+				 * This will help not to wait indefinitely
+				 * and freeze. If this log is triggered then
+				 * fix it.
+				 */
+				rc = cam_sensor_update_req_mgr(s_ctrl, csl_packet);
+				if (rc)
+					CAM_ERR(CAM_SENSOR,
+						"Failed in adding request to req_mgr");
+				goto end;
 			}
-		}
-		break;
+ 		}
+ 		break;
 	}
 	case CAM_SENSOR_PACKET_OPCODE_SENSOR_FRAME_SKIP_UPDATE: {
 		if (s_ctrl->sensor_state < CAM_SENSOR_STANDBY) {
@@ -814,7 +873,17 @@ int32_t cam_sensor_update_i2c_info(struct cam_cmd_i2c_info *i2c_info,
 		cci_client->sid = i2c_info->slave_addr >> 1;
 		cci_client->retries = 3;
 		cci_client->id_map = 0;
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+		if(s_ctrl->soc_info.i2c_freq_mode != 0xFF){
+			cci_client->i2c_freq_mode = s_ctrl->soc_info.i2c_freq_mode;
+			CAM_INFO(CAM_SENSOR, "iic-freq-mode override as %d ",cci_client->i2c_freq_mode);
+		}
+		else{
+			cci_client->i2c_freq_mode = i2c_info->i2c_freq_mode;
+		}
+#else
 		cci_client->i2c_freq_mode = i2c_info->i2c_freq_mode;
+#endif
 		CAM_DBG(CAM_SENSOR, "CCI: %d Master: %d slave_addr: 0x%x freq_mode: %d",
 			cci_client->cci_device, cci_client->cci_i2c_master, i2c_info->slave_addr,
 			i2c_info->i2c_freq_mode);
@@ -1098,6 +1167,9 @@ put_ref:
 	cam_mem_put_cpu_buf(handle);
 	return rc;
 }
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+EXPORT_SYMBOL(cam_handle_mem_ptr);
+#endif
 
 void cam_sensor_query_cap(struct cam_sensor_ctrl_t *s_ctrl,
 	struct  cam_sensor_query_cap *query_cap)
@@ -1176,6 +1248,9 @@ void cam_sensor_shutdown(struct cam_sensor_ctrl_t *s_ctrl)
 	s_ctrl->is_probe_succeed = 0;
 	s_ctrl->last_flush_req = 0;
 	s_ctrl->sensor_state = CAM_SENSOR_INIT;
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	s_ctrl->streamon_num = 0;
+#endif
 }
 
 int cam_sensor_match_id(struct cam_sensor_ctrl_t *s_ctrl)
@@ -1228,8 +1303,12 @@ int cam_sensor_match_id(struct cam_sensor_ctrl_t *s_ctrl)
 				slave_info->sensor_id);
 		return -ENODEV;
 	}
+
 	return rc;
 }
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+EXPORT_SYMBOL(cam_sensor_match_id);
+#endif
 
 int cam_sensor_stream_off(struct cam_sensor_ctrl_t *s_ctrl)
 {
@@ -1249,12 +1328,28 @@ int cam_sensor_stream_off(struct cam_sensor_ctrl_t *s_ctrl)
 	if (!s_ctrl->stream_off_on_flush &&
 		s_ctrl->i2c_data.streamoff_settings.is_settings_valid &&
 		(s_ctrl->i2c_data.streamoff_settings.request_id == 0)) {
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+		for(int i = 0 ;i < STREAMOFF_RETRYNUM; i++) {
+			rc = cam_sensor_apply_settings(s_ctrl, 0,
+				CAM_SENSOR_PACKET_OPCODE_SENSOR_STREAMOFF);
+			if (rc < 0)
+			{
+				CAM_ERR(CAM_SENSOR,
+					"cannot apply streamoff settings for %s.try %d times,total %d times",
+					s_ctrl->sensor_name,i,STREAMOFF_RETRYNUM);
+				usleep_range(200000, 200000);//200ms
+			}
+			else
+				break;
+		}
+#else
 		rc = cam_sensor_apply_settings(s_ctrl, 0,
 			CAM_SENSOR_PACKET_OPCODE_SENSOR_STREAMOFF);
 		if (rc < 0)
 			CAM_ERR(CAM_SENSOR,
 				"cannot apply streamoff settings for %s",
 				s_ctrl->sensor_name);
+#endif
 	}
 
 	cam_sensor_release_per_frame_resource(s_ctrl);
@@ -1285,6 +1380,10 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 	struct cam_sensor_power_ctrl_t *power_info = NULL;
 	struct timespec64 ts;
 	uint64_t ms, sec, min, hrs;
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	char trace[64] = {0};
+	char fb_payload[PAYLOAD_LENGTH] = {0};
+#endif
 
 	if (!s_ctrl || !arg) {
 		CAM_ERR(CAM_SENSOR, "s_ctrl is NULL");
@@ -1408,7 +1507,6 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 				goto free_power_settings;
 			}
 		}
-
 		rc = cam_sensor_power_down(s_ctrl);
 		if (rc < 0) {
 			CAM_ERR(CAM_SENSOR, "Fail in %s sensor Power Down",
@@ -1576,6 +1674,9 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 		s_ctrl->last_flush_req = 0;
 		s_ctrl->last_applied_done_timestamp = 0;
 		s_ctrl->stream_off_on_flush = false;
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+		s_ctrl->streamon_num = 0;
+#endif
 	}
 		break;
 	case CAM_QUERY_CAP: {
@@ -1604,6 +1705,13 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 			goto release_mutex;
 		}
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+		trace_begin("%s sensor_stream_on", s_ctrl->sensor_name);
+		memset(trace, 0, sizeof(trace));
+		snprintf(trace, sizeof(trace), "6 StreamOn %s", s_ctrl->sensor_name);
+		trace_int(trace, 1);
+#endif
+
 		if (s_ctrl->i2c_data.streamon_settings.is_settings_valid &&
 			(s_ctrl->i2c_data.streamon_settings.request_id == 0)) {
 			rc = cam_sensor_apply_settings(s_ctrl, 0,
@@ -1612,10 +1720,19 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 				CAM_ERR(CAM_SENSOR,
 					"cannot apply streamon settings for %s",
 					s_ctrl->sensor_name);
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+				trace_end();
+				trace_int(trace, 0);
+#endif
 				goto release_mutex;
 			}
 		}
 		s_ctrl->sensor_state = CAM_SENSOR_START;
+
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+		trace_end();
+		trace_int(trace, 0);
+#endif
 
 		if (s_ctrl->stream_off_after_eof)
 			s_ctrl->is_stopped_by_user = false;
@@ -1655,7 +1772,20 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 			goto release_mutex;
 		}
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+		trace_begin("%s sensor_stream_off", s_ctrl->sensor_name);
+		memset(trace, 0, sizeof(trace));
+		snprintf(trace, sizeof(trace), "6 StreamOff %s", s_ctrl->sensor_name);
+		trace_int(trace, 1);
+#endif
+
 		rc = cam_sensor_stream_off(s_ctrl);
+
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+		trace_end();
+		trace_int(trace, 0);
+#endif
+
 		if (rc)
 			goto release_mutex;
 	}
@@ -1681,7 +1811,11 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 			rc = cam_sensor_apply_settings(s_ctrl, 0,
 				pkt_opcode);
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+			if ((rc == -EAGAIN || rc == -ETIMEDOUT || rc == -EINVAL) &&
+#else
 			if ((rc == -EAGAIN) &&
+#endif
 			(s_ctrl->io_master_info.master_type == CCI_MASTER)) {
 				/* If CCI hardware is resetting we need to wait
 				 * for sometime before reapply
@@ -1690,6 +1824,10 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 					"%s: Reapplying the Init settings due to cci hw reset",
 					s_ctrl->sensor_name);
 				usleep_range(1000, 1010);
+ #ifdef OPLUS_FEATURE_CAMERA_COMMON
+				cam_sensor_power_down(s_ctrl);
+				cam_sensor_power_up(s_ctrl);
+#endif
 				rc = cam_sensor_apply_settings(s_ctrl, 0,
 					pkt_opcode);
 			}
@@ -1710,7 +1848,14 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 				goto release_mutex;
 			}
 		}
-
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+		rc = oplus_cam_sensor_apply_settings(s_ctrl);
+		if (rc < 0) {
+				CAM_ERR(CAM_SENSOR,"%s: Fail in oplus_cam_sensor_apply_settings",s_ctrl->sensor_name);
+				KEVENT_FB_SNESOR_WR_FAILED(fb_payload, "apply setting fail", s_ctrl->sensordata->slave_info.sensor_id);
+				goto release_mutex;
+		}
+#endif
 		if (s_ctrl->i2c_data.config_settings.is_settings_valid &&
 			(s_ctrl->i2c_data.config_settings.request_id == 0)) {
 			if (s_ctrl->sensor_state == CAM_SENSOR_START) {
@@ -1794,6 +1939,9 @@ free_power_settings:
 	mutex_unlock(&(s_ctrl->cam_sensor_mutex));
 	return rc;
 }
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+EXPORT_SYMBOL(cam_sensor_driver_cmd);
+#endif
 
 int cam_sensor_publish_dev_info(struct cam_req_mgr_device_info *info)
 {
@@ -1902,11 +2050,37 @@ int cam_sensor_power_up(struct cam_sensor_ctrl_t *s_ctrl)
 		return -EINVAL;
 	}
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	mutex_lock(&(s_ctrl->sensor_power_state_mutex));
+	if(s_ctrl->sensor_power_state != CAM_SENSOR_POWER_OFF)
+	{
+		s_ctrl->sensor_power_state = CAM_SENSOR_POWER_ON;
+		mutex_lock(&(s_ctrl->sensor_initsetting_mutex));
+		if (s_ctrl->sensor_initsetting_state != CAM_SENSOR_SETTING_WRITE_SUCCESS)
+		{
+			s_ctrl->sensor_initsetting_state = CAM_SENSOR_SETTING_WRITE_INVALID;
+		}
+		if (s_ctrl->sensor_qsc_setting.qscsetting_state != CAM_SENSOR_SETTING_WRITE_SUCCESS)
+		{
+			s_ctrl->sensor_qsc_setting.qscsetting_state = CAM_SENSOR_SETTING_WRITE_INVALID;
+		}
+		mutex_unlock(&(s_ctrl->sensor_initsetting_mutex));
+		mutex_unlock(&(s_ctrl->sensor_power_state_mutex));
+		CAM_INFO(CAM_SENSOR, "sensor have power up!");
+		rc = 0;
+		return rc;
+	}
+#endif
+
 	if (s_ctrl->bob_pwm_switch) {
 		if (cam_sensor_bob_pwm_mode_switch(soc_info,
 			s_ctrl->bob_reg_index, true))
 			CAM_WARN(CAM_SENSOR, "BoB PWM setup failed");
 	}
+
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	trace_begin("%d_%d_0x%x aon user", s_ctrl->cci_num, s_ctrl->cci_i2c_master, s_ctrl->sensordata->slave_info.sensor_id);
+#endif
 
 	if (s_ctrl->aon_camera_id != NOT_AON_CAM) {
 		CAM_INFO(CAM_SENSOR,
@@ -1918,9 +2092,18 @@ int cam_sensor_power_up(struct cam_sensor_ctrl_t *s_ctrl)
 			CAM_ERR(CAM_SENSOR,
 				"Main camera access operation is not successful rc: %d",
 				rc);
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+			trace_end();
+			mutex_unlock(&(s_ctrl->sensor_power_state_mutex));
+#endif
 			return rc;
 		}
 	}
+
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	trace_end();
+	trace_begin("%d_%d_0x%x Power Up", s_ctrl->cci_num, s_ctrl->cci_i2c_master, s_ctrl->sensordata->slave_info.sensor_id);
+#endif
 
 	if (s_ctrl->io_master_info.master_type == I3C_MASTER)
 		i3c_probe_completion = cam_sensor_get_i3c_completion(s_ctrl->soc_info.index);
@@ -1937,14 +2120,43 @@ int cam_sensor_power_up(struct cam_sensor_ctrl_t *s_ctrl)
 	rc = cam_sensor_core_power_up(power_info, soc_info, i3c_probe_completion);
 	if (rc < 0) {
 		CAM_ERR(CAM_SENSOR, "core power up failed:%d", rc);
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+		trace_end();
+		mutex_unlock(&(s_ctrl->sensor_power_state_mutex));
+#endif
 		goto powerup_failure;
 	}
+
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	trace_end();
+	trace_begin("%d_%d_0x%x Init", s_ctrl->cci_num, s_ctrl->cci_i2c_master, s_ctrl->sensordata->slave_info.sensor_id);
+#endif
 
 	rc = camera_io_init(&(s_ctrl->io_master_info));
 	if (rc < 0) {
 		CAM_ERR(CAM_SENSOR, "cci_init failed: rc: %d", rc);
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+		trace_end();
+		mutex_unlock(&(s_ctrl->sensor_power_state_mutex));
+#endif
 		goto cci_failure;
 	}
+
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	trace_end();
+	CAM_INFO(CAM_SENSOR,
+		"Sensor Power up success for %s sensor_id:0x%x, slave_addr:0x%x",
+		s_ctrl->sensor_name,
+		s_ctrl->sensordata->slave_info.sensor_id,
+		s_ctrl->sensordata->slave_info.sensor_slave_addr
+		);
+	s_ctrl->sensor_power_state = CAM_SENSOR_POWER_ON;
+	mutex_lock(&(s_ctrl->sensor_initsetting_mutex));
+	s_ctrl->sensor_initsetting_state = CAM_SENSOR_SETTING_WRITE_INVALID;
+	s_ctrl->sensor_qsc_setting.qscsetting_state = CAM_SENSOR_SETTING_WRITE_INVALID;
+	mutex_unlock(&(s_ctrl->sensor_initsetting_mutex));
+	mutex_unlock(&(s_ctrl->sensor_power_state_mutex));
+#endif
 
 	return rc;
 
@@ -1962,6 +2174,9 @@ powerup_failure:
 	return rc;
 
 }
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+EXPORT_SYMBOL(cam_sensor_power_up);
+#endif
 
 int cam_sensor_power_down(struct cam_sensor_ctrl_t *s_ctrl)
 {
@@ -1976,6 +2191,21 @@ int cam_sensor_power_down(struct cam_sensor_ctrl_t *s_ctrl)
 
 	if (s_ctrl->hw_no_ops)
 		return rc;
+
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	mutex_lock(&(s_ctrl->sensor_power_state_mutex));
+	if(s_ctrl->sensor_power_state != CAM_SENSOR_POWER_ON)
+	{
+		s_ctrl->sensor_power_state = CAM_SENSOR_POWER_OFF;
+		mutex_lock(&(s_ctrl->sensor_initsetting_mutex));
+		s_ctrl->sensor_initsetting_state = CAM_SENSOR_SETTING_WRITE_INVALID;
+		s_ctrl->sensor_qsc_setting.qscsetting_state = CAM_SENSOR_SETTING_WRITE_INVALID;
+		mutex_unlock(&(s_ctrl->sensor_initsetting_mutex));
+		CAM_INFO(CAM_SENSOR, "sensor have power down!");
+		mutex_unlock(&(s_ctrl->sensor_power_state_mutex));
+		return rc;
+	}
+#endif
 
 	/*
 	 * Even if any section of powerdown fails, we still need to move on
@@ -1995,8 +2225,12 @@ int cam_sensor_power_down(struct cam_sensor_ctrl_t *s_ctrl)
 		if (ret < 0) {
 			CAM_ERR(CAM_SENSOR, "%s core power down failed:%d",
 				s_ctrl->sensor_name, ret);
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+			mutex_unlock(&(s_ctrl->sensor_power_state_mutex));
+#endif
 			rc = ret;
 		}
+
 	}
 
 	if (s_ctrl->aon_camera_id != NOT_AON_CAM) {
@@ -2009,6 +2243,9 @@ int cam_sensor_power_down(struct cam_sensor_ctrl_t *s_ctrl)
 			CAM_ERR(CAM_SENSOR,
 				"Main camera disable CPAS operation failed ret: %d", ret);
 			rc = ret;
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+			mutex_unlock(&(s_ctrl->sensor_power_state_mutex));
+#endif
 		}
 	}
 
@@ -2022,9 +2259,24 @@ int cam_sensor_power_down(struct cam_sensor_ctrl_t *s_ctrl)
 	}
 
 	camera_io_release(&(s_ctrl->io_master_info));
-
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	CAM_INFO(CAM_SENSOR,
+		"Power down success for %s sensor_id: 0x%x, slave_addr: 0x%x",
+		s_ctrl->sensor_name,
+		s_ctrl->sensordata->slave_info.sensor_id,
+		s_ctrl->sensordata->slave_info.sensor_slave_addr);
+	s_ctrl->sensor_power_state = CAM_SENSOR_POWER_OFF;
+	mutex_lock(&(s_ctrl->sensor_initsetting_mutex));
+	s_ctrl->sensor_initsetting_state = CAM_SENSOR_SETTING_WRITE_INVALID;
+	s_ctrl->sensor_qsc_setting.qscsetting_state = CAM_SENSOR_SETTING_WRITE_INVALID;
+	mutex_unlock(&(s_ctrl->sensor_initsetting_mutex));
+	mutex_unlock(&(s_ctrl->sensor_power_state_mutex));
+#endif
 	return rc;
 }
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+EXPORT_SYMBOL(cam_sensor_power_down);
+#endif
 
 int cam_sensor_apply_settings(struct cam_sensor_ctrl_t *s_ctrl,
 	int64_t req_id, enum cam_sensor_packet_opcodes opcode)
@@ -2037,13 +2289,36 @@ int cam_sensor_apply_settings(struct cam_sensor_ctrl_t *s_ctrl,
 	ktime_t current_time;
 	struct timespec64 current_ts;
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	mutex_lock(&(s_ctrl->sensor_power_state_mutex));
+	if(s_ctrl->sensor_power_state == CAM_SENSOR_POWER_OFF) {
+		CAM_INFO(CAM_SENSOR, "sensor have power down ,cannot apply setting");
+		mutex_unlock(&(s_ctrl->sensor_power_state_mutex));
+		return rc;
+	}
+	mutex_unlock(&(s_ctrl->sensor_power_state_mutex));
+#endif
+
 	if (req_id == 0) {
 		switch (opcode) {
 		case CAM_SENSOR_PACKET_OPCODE_SENSOR_STREAMON: {
 			i2c_set = &s_ctrl->i2c_data.streamon_settings;
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+			s_ctrl->streamon_num = s_ctrl->streamon_num + 1;
+#endif
 			break;
 		}
 		case CAM_SENSOR_PACKET_OPCODE_SENSOR_INITIAL_CONFIG: {
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+			mutex_lock(&(s_ctrl->sensor_initsetting_mutex));
+			if(s_ctrl->sensor_initsetting_state != CAM_SENSOR_SETTING_WRITE_INVALID)
+			{
+				mutex_unlock(&(s_ctrl->sensor_initsetting_mutex));
+				CAM_INFO(CAM_SENSOR, "init setting have write");
+				return 0;
+			}
+			mutex_unlock(&(s_ctrl->sensor_initsetting_mutex));
+#endif
 			i2c_set = &s_ctrl->i2c_data.init_settings;
 			break;
 		}
@@ -2063,6 +2338,29 @@ int cam_sensor_apply_settings(struct cam_sensor_ctrl_t *s_ctrl,
 			i2c_set = &s_ctrl->i2c_data.reg_bank_lock_settings;
 			break;
 		}
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+		case CAM_SENSOR_PACKET_OPCODE_SENSOR_RESOLUTION: {
+			i2c_set = &s_ctrl->i2c_data.resolution_settings;
+			s_ctrl->streamon_num = 0;
+			break;
+		}
+		case CAM_SENSOR_PACKET_OPCODE_SENSOR_QSC: {
+			i2c_set = &s_ctrl->i2c_data.qsc_settings;
+			break;
+		}
+		case CAM_SENSOR_PACKET_OPCODE_SENSOR_LSC: {
+			i2c_set = &s_ctrl->i2c_data.lsc_settings;
+			break;
+		}
+		case CAM_SENSOR_PACKET_OPCODE_SENSOR_AWBOTP: {
+			i2c_set = &s_ctrl->i2c_data.awbotp_settings;
+			break;
+		}
+		case CAM_SENSOR_PACKET_OPCODE_SENSOR_SPC: {
+			i2c_set = &s_ctrl->i2c_data.spc_settings;
+			break;
+		}
+#endif
 		case CAM_SENSOR_PACKET_OPCODE_SENSOR_UPDATE:
 		case CAM_SENSOR_PACKET_OPCODE_SENSOR_FRAME_SKIP_UPDATE:
 		case CAM_SENSOR_PACKET_OPCODE_SENSOR_PROBE:
@@ -2071,8 +2369,15 @@ int cam_sensor_apply_settings(struct cam_sensor_ctrl_t *s_ctrl,
 			return 0;
 		}
 		if (i2c_set->is_settings_valid == 1) {
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+			trace_begin("%d_%d_0x%x Apply Setting %d", s_ctrl->cci_num, s_ctrl->cci_i2c_master, s_ctrl->sensordata->slave_info.sensor_id, opcode);
+#endif
 			list_for_each_entry(i2c_list,
 				&(i2c_set->list_head), list) {
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+				oplus_sensor_ov_bypass_framedrop(s_ctrl,opcode,i2c_list);
+				oplus_sensor_sony_bypass_vsync(s_ctrl,i2c_list);
+#endif
 				if (!s_ctrl->hw_no_ops)
 					rc = cam_sensor_i2c_modes_util(
 						&(s_ctrl->io_master_info),
@@ -2081,9 +2386,15 @@ int cam_sensor_apply_settings(struct cam_sensor_ctrl_t *s_ctrl,
 					CAM_ERR(CAM_SENSOR,
 						"Failed to apply settings: %d",
 						rc);
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+					trace_end();
+#endif
 					return rc;
 				}
 			}
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+			trace_end();
+#endif
 		}
 		ktime_get_clocktai_ts64(&i2c_set->applied_timestamp);
 	} else if (req_id > 0) {
@@ -2114,6 +2425,9 @@ int cam_sensor_apply_settings(struct cam_sensor_ctrl_t *s_ctrl,
 			i2c_set[offset].request_id == req_id) {
 			list_for_each_entry(i2c_list,
 				&(i2c_set[offset].list_head), list) {
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+				oplus_sensor_sony_bypass_vsync(s_ctrl,i2c_list);
+#endif
 				if (!s_ctrl->hw_no_ops)
 					rc = cam_sensor_i2c_modes_util(
 						&(s_ctrl->io_master_info),
@@ -2193,9 +2507,17 @@ int cam_sensor_apply_settings(struct cam_sensor_ctrl_t *s_ctrl,
 			}
 		}
 	}
-
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	if (opcode == CAM_SENSOR_PACKET_OPCODE_SENSOR_INITIAL_CONFIG)
+	{
+		s_ctrl->sensor_initsetting_state = CAM_SENSOR_SETTING_WRITE_SUCCESS;
+	}
+#endif
 	return rc;
 }
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+EXPORT_SYMBOL(cam_sensor_apply_settings);
+#endif
 
 int32_t cam_sensor_apply_request(struct cam_req_mgr_apply_request *apply)
 {
@@ -2213,6 +2535,14 @@ int32_t cam_sensor_apply_request(struct cam_req_mgr_apply_request *apply)
 	if (!s_ctrl) {
 		CAM_ERR(CAM_SENSOR, "Device data is NULL");
 		return -EINVAL;
+	}
+
+	if ((s_ctrl->modeswitch_delay == CAM_MODESWITCH_DELAY_1) &&
+		(apply->request_id > s_ctrl->last_flush_req + 1)) {
+		cam_sensor_apply_settings(s_ctrl, apply->request_id - 1,
+			CAM_SENSOR_PACKET_OPCODE_SENSOR_DEFERRED_META);
+		CAM_DBG(CAM_SENSOR, "Sensor[%d] applying deferred settings from req id: %lld",
+			s_ctrl->soc_info.index, apply->request_id);
 	}
 
 	if ((apply->recovery) && (apply->request_id > 0)) {
@@ -2272,6 +2602,13 @@ int32_t cam_sensor_notify_frame_skip(struct cam_req_mgr_apply_request *apply)
 	/*
 	 * If mode switch delay is 1, and there are no further requests
 	 */
+
+	CAM_INFO(CAM_REQ, "jgw, sensor[%d], status[modeswitch:%d, nofurtherrequest:%d] req:%lld",
+			s_ctrl->soc_info.index,
+			s_ctrl->modeswitch_delay,
+			apply->no_further_requests,
+			apply->request_id);
+
 	if ((s_ctrl->modeswitch_delay == CAM_MODESWITCH_DELAY_1) && (apply->no_further_requests)) {
 		cam_sensor_apply_settings(s_ctrl, apply->request_id,
 			CAM_SENSOR_PACKET_OPCODE_SENSOR_DEFERRED_META);

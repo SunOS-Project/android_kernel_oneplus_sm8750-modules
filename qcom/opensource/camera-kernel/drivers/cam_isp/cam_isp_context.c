@@ -2346,11 +2346,18 @@ static int __cam_isp_handle_deferred_buf_done(
 		}
 
 		if (!bubble_handling) {
+
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+			CAM_WARN_RATE_LIMIT(CAM_ISP,
+				"Unexpected Buf done for res=0x%x on ctx[%u] link[0x%x] for Req %llu, status=%d, possible bh delays",
+				req_isp->fence_map_out[j].resource_handle, ctx->ctx_id,
+				ctx->link_hdl, req->request_id, status);
+#else
 			CAM_WARN(CAM_ISP,
 				"Unexpected Buf done for res=0x%x on ctx[%u] link[0x%x] for Req %llu, status=%d, possible bh delays",
 				req_isp->fence_map_out[j].resource_handle, ctx->ctx_id,
 				ctx->link_hdl, req->request_id, status);
-
+#endif
 			rc = cam_sync_signal(req_isp->fence_map_out[j].sync_id,
 				status, event_cause);
 			if (rc) {
@@ -3558,6 +3565,10 @@ static int __cam_isp_ctx_notify_sof_in_activated_state(
 	struct cam_isp_hw_epoch_event_data *epoch_done_event_data =
 			(struct cam_isp_hw_epoch_event_data *)evt_data;
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	char trace[64] = {0};
+#endif
+
 	if (!evt_data) {
 		CAM_ERR(CAM_ISP, "invalid event data");
 		return -EINVAL;
@@ -3665,9 +3676,18 @@ notify_only:
 			}
 		}
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+		if (ctx_isp->substate_activated == CAM_ISP_CTX_ACTIVATED_BUBBLE) {
+			request_id = 0;
+			memset(trace, 0, sizeof(trace));
+			snprintf(trace, sizeof(trace), "KMD %d_4 Skip Frame", ctx->link_hdl);
+			trace_int(trace, 0);
+			trace_begin_end("Skip Frame: Req[%lld] CAM_ISP_CTX_ACTIVATED_BUBBLE", req->request_id);
+		}
+#else
 		if (ctx_isp->substate_activated == CAM_ISP_CTX_ACTIVATED_BUBBLE)
 			request_id = 0;
-
+#endif
 		if (request_id != 0)
 			ctx_isp->reported_req_id = request_id;
 
@@ -3698,6 +3718,9 @@ static int __cam_isp_ctx_notify_eof_in_activated_state(
 			ctx->ctx_id, ctx->link_hdl);
 	__cam_isp_ctx_update_state_monitor_array(ctx_isp,
 		CAM_ISP_STATE_CHANGE_TRIGGER_CDM_DONE, last_cdm_done_req);
+
+	CAM_DBG(CAM_ISP, "Reset unserved_rup in EOF: %d", atomic_read(&ctx_isp->unserved_rup));
+	atomic_set(&ctx_isp->unserved_rup, 0);
 
 	/* notify reqmgr with eof signal */
 	rc = __cam_isp_ctx_notify_trigger_util(CAM_TRIGGER_POINT_EOF, ctx_isp);
@@ -5661,6 +5684,7 @@ static int __cam_isp_ctx_apply_req_in_activated_state(
 
 	rc = ctx->hw_mgr_intf->hw_config(ctx->hw_mgr_intf->hw_mgr_priv, &cfg);
 	if (!rc) {
+		ctx_isp->last_apply_settings = false;
 		spin_lock_bh(&ctx->lock);
 		atomic_set(&ctx_isp->last_applied_default, 0);
 		ctx_isp->substate_activated = next_state;
@@ -7476,6 +7500,7 @@ static int __cam_isp_ctx_release_hw_in_top_state(struct cam_context *ctx,
 	ctx_isp->custom_enabled = false;
 	ctx_isp->use_frame_header_ts = false;
 	ctx_isp->use_default_apply = false;
+	ctx_isp->last_apply_settings = false;
 	ctx_isp->frame_id = 0;
 	ctx_isp->active_req_cnt = 0;
 	ctx_isp->reported_req_id = 0;
@@ -9914,6 +9939,7 @@ static int __cam_isp_ctx_apply_default_settings(
 				"Apply default failed in active substate %d rc %d ctx: %u link: 0x%x",
 				ctx_isp->substate_activated, rc, ctx->ctx_id, ctx->link_hdl);
 		atomic_set(&ctx_isp->last_applied_default, 1);
+		ctx_isp->last_apply_settings = true;
 	}
 
 	return rc;
@@ -10440,6 +10466,7 @@ int cam_isp_context_init(struct cam_isp_context *ctx,
 	ctx->custom_enabled = false;
 	ctx->use_frame_header_ts = false;
 	ctx->use_default_apply = false;
+	ctx->last_apply_settings = false;
 	ctx->active_req_cnt = 0;
 	ctx->reported_req_id = 0;
 	ctx->bubble_frame_cnt = 0;

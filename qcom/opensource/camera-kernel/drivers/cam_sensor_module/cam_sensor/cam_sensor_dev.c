@@ -128,13 +128,20 @@ static long cam_sensor_init_subdev_do_ioctl(struct v4l2_subdev *sd,
 }
 
 #endif
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+struct v4l2_subdev_core_ops cam_sensor_subdev_core_ops = {
+#else
 static struct v4l2_subdev_core_ops cam_sensor_subdev_core_ops = {
+#endif
 	.ioctl = cam_sensor_subdev_ioctl,
 #ifdef CONFIG_COMPAT
 	.compat_ioctl32 = cam_sensor_init_subdev_do_ioctl,
 #endif
 	.s_power = cam_sensor_power,
 };
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+EXPORT_SYMBOL(cam_sensor_subdev_core_ops);
+#endif
 
 static struct v4l2_subdev_ops cam_sensor_subdev_ops = {
 	.core = &cam_sensor_subdev_core_ops,
@@ -405,6 +412,18 @@ static int cam_sensor_i2c_component_bind(struct device *dev,
 	INIT_LIST_HEAD(&(s_ctrl->i2c_data.reg_bank_unlock_settings.list_head));
 	INIT_LIST_HEAD(&(s_ctrl->i2c_data.reg_bank_lock_settings.list_head));
 	INIT_LIST_HEAD(&(s_ctrl->i2c_data.read_settings.list_head));
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	INIT_LIST_HEAD(&(s_ctrl->i2c_data.resolution_settings.list_head));
+	INIT_LIST_HEAD(&(s_ctrl->i2c_data.lsc_settings.list_head));
+	INIT_LIST_HEAD(&(s_ctrl->i2c_data.qsc_settings.list_head));
+	INIT_LIST_HEAD(&(s_ctrl->i2c_data.awbotp_settings.list_head));
+	INIT_LIST_HEAD(&(s_ctrl->i2c_data.spc_settings.list_head));
+	mutex_init(&(s_ctrl->sensor_power_state_mutex));
+	mutex_init(&(s_ctrl->sensor_initsetting_mutex));
+	s_ctrl->sensor_power_state = CAM_SENSOR_POWER_OFF;
+	s_ctrl->sensor_initsetting_state = CAM_SENSOR_SETTING_WRITE_INVALID;
+	s_ctrl->sensor_qsc_setting.qscsetting_state = CAM_SENSOR_SETTING_WRITE_INVALID;
+#endif
 
 	for (i = 0; i < MAX_PER_FRAME_ARRAY; i++) {
 		INIT_LIST_HEAD(&(s_ctrl->i2c_data.deferred_frame_update[i].list_head));
@@ -645,6 +664,18 @@ static int cam_sensor_component_bind(struct device *dev,
 	INIT_LIST_HEAD(&(s_ctrl->i2c_data.reg_bank_unlock_settings.list_head));
 	INIT_LIST_HEAD(&(s_ctrl->i2c_data.reg_bank_lock_settings.list_head));
 	INIT_LIST_HEAD(&(s_ctrl->i2c_data.read_settings.list_head));
+
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	INIT_LIST_HEAD(&(s_ctrl->i2c_data.resolution_settings.list_head));
+	INIT_LIST_HEAD(&(s_ctrl->i2c_data.lsc_settings.list_head));
+	INIT_LIST_HEAD(&(s_ctrl->i2c_data.qsc_settings.list_head));
+	INIT_LIST_HEAD(&(s_ctrl->i2c_data.awbotp_settings.list_head));
+	INIT_LIST_HEAD(&(s_ctrl->i2c_data.spc_settings.list_head));
+	mutex_init(&(s_ctrl->sensor_power_state_mutex));
+	mutex_init(&(s_ctrl->sensor_initsetting_mutex));
+	s_ctrl->sensor_power_state = CAM_SENSOR_POWER_OFF;
+	s_ctrl->sensor_initsetting_state = CAM_SENSOR_SETTING_WRITE_INVALID;
+#endif
 
 	for (i = 0; i < MAX_PER_FRAME_ARRAY; i++) {
 		INIT_LIST_HEAD(&(s_ctrl->i2c_data.deferred_frame_update[i].list_head));

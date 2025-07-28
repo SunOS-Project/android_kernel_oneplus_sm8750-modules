@@ -644,6 +644,9 @@ int cam_vfe_core_init(struct cam_vfe_hw_core_info  *core_info,
 		return -ENODEV;
 	}
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	CAM_DBG(CAM_ISP, "[QC DBG] top version %x, num_registers %d", vfe_hw_info->top_version, vfe_hw_info->irq_hw_info->top_irq_reg->num_registers);
+#endif
 	rc = cam_irq_controller_init(drv_name,
 		CAM_SOC_GET_REG_MAP_START(soc_info, VFE_CORE_BASE_IDX),
 		vfe_hw_info->irq_hw_info->top_irq_reg,

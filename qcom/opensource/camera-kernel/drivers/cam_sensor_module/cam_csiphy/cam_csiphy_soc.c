@@ -16,6 +16,22 @@
 #include "include/cam_csiphy_2_4_0_hwreg.h"
 #include "include/cam_csiphy_2_4_1_hwreg.h"
 #include "cam_mem_mgr_api.h"
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+#include "include/cam_csiphy_2_3_0_hwreg_dodge_tele.h"
+#include "include/cam_csiphy_2_3_0_hwreg_dodge_ultrawide.h"
+#include "include/cam_csiphy_2_3_0_hwreg_pista_front.h"
+#include "include/cam_csiphy_2_3_0_hwreg_zhufeng_front.h"
+#include "include/cam_csiphy_2_3_0_hwreg_zhufeng_main.h"
+#include "include/cam_csiphy_2_3_0_hwreg_zhufeng_ultrawide.h"
+#include "include/cam_csiphy_2_3_0_hwreg_zhufeng_tele.h"
+#include "include/cam_csiphy_2_3_0_hwreg_zhufeng_ultratele.h"
+#include "include/cam_csiphy_2_3_0_hwreg_hummer_main.h"
+#include "include/cam_csiphy_2_3_0_hwreg_petrel.h"
+#include "include/cam_csiphy_2_3_0_hwreg_piloti_ultrawide.h"
+#include "include/cam_csiphy_2_3_0_hwreg_piloti_main.h"
+#include "include/cam_csiphy_2_3_0_hwreg_pagani_front.h"
+#include "include/cam_csiphy_2_3_0_hwreg_pagani_main.h"
+#endif
 
 /* Clock divide factor for CPHY spec v1.0 */
 #define CSIPHY_DIVISOR_16                    16
@@ -367,6 +383,78 @@ int32_t cam_csiphy_parse_dt_info(struct platform_device *pdev,
 		csiphy_dev->hw_version = CSIPHY_VERSION_V241;
 		csiphy_dev->is_divisor_32_comp = true;
 		csiphy_dev->clk_lane = 0;
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	} else if (of_device_is_compatible(soc_info->dev->of_node, "qcom,csiphy-dodgetele")) {
+		csiphy_dev->ctrl_reg = &ctrl_reg_2_3_0_dodge_tele;
+		csiphy_dev->hw_version = CSIPHY_VERSION_V230_DODGE_TELE;
+		csiphy_dev->is_divisor_32_comp = true;
+		csiphy_dev->clk_lane = 0;
+	} else if (of_device_is_compatible(soc_info->dev->of_node, "qcom,csiphy-dodgeultrawide")) {
+		csiphy_dev->ctrl_reg = &ctrl_reg_2_3_0_dodge_ultrawide;
+		csiphy_dev->hw_version = CSIPHY_VERSION_V230_DODGE_ULTRAWIDE;
+		csiphy_dev->is_divisor_32_comp = true;
+		csiphy_dev->clk_lane = 0;
+	} else if (of_device_is_compatible(soc_info->dev->of_node, "qcom,csiphy-pistafront")) {
+		csiphy_dev->ctrl_reg = &ctrl_reg_2_3_0_pista_front;
+		csiphy_dev->hw_version = CSIPHY_VERSION_V230_PISTA_FRONT;
+		csiphy_dev->is_divisor_32_comp = true;
+		csiphy_dev->clk_lane = 0;
+	} else if (of_device_is_compatible(soc_info->dev->of_node, "qcom,csiphy-zhufengfront")) {
+		csiphy_dev->ctrl_reg = &ctrl_reg_2_3_0_zhufeng_front;
+		csiphy_dev->hw_version = CSIPHY_VERSION_V230_ZHUFENG_FRONT;
+		csiphy_dev->is_divisor_32_comp = true;
+		csiphy_dev->clk_lane = 0;
+	} else if (of_device_is_compatible(soc_info->dev->of_node, "qcom,csiphy-zhufengmain")) {
+		csiphy_dev->ctrl_reg = &ctrl_reg_2_3_0_zhufeng_main;
+		csiphy_dev->hw_version = CSIPHY_VERSION_V230_ZHUFENG_MAIN;
+		csiphy_dev->is_divisor_32_comp = true;
+		csiphy_dev->clk_lane = 0;
+	} else if (of_device_is_compatible(soc_info->dev->of_node, "qcom,csiphy-zhufengultrawide")) {
+		csiphy_dev->ctrl_reg = &ctrl_reg_2_3_0_zhufeng_ultrawide;
+		csiphy_dev->hw_version = CSIPHY_VERSION_V230_ZHUFENG_ULTRAWIDE;
+		csiphy_dev->is_divisor_32_comp = true;
+		csiphy_dev->clk_lane = 0;
+	} else if (of_device_is_compatible(soc_info->dev->of_node, "qcom,csiphy-zhufengtele")) {
+		csiphy_dev->ctrl_reg = &ctrl_reg_2_3_0_zhufeng_tele;
+		csiphy_dev->hw_version = CSIPHY_VERSION_V230_ZHUFENG_TELE;
+		csiphy_dev->is_divisor_32_comp = true;
+		csiphy_dev->clk_lane = 0;
+	} else if (of_device_is_compatible(soc_info->dev->of_node, "qcom,csiphy-zhufengultratele")) {
+		csiphy_dev->ctrl_reg = &ctrl_reg_2_3_0_zhufeng_ultratele;
+		csiphy_dev->hw_version = CSIPHY_VERSION_V230_ZHUFENG_ULTRATELE;
+		csiphy_dev->is_divisor_32_comp = true;
+		csiphy_dev->clk_lane = 0;
+	} else if (of_device_is_compatible(soc_info->dev->of_node, "qcom,csiphy-hummermain")) {
+		csiphy_dev->ctrl_reg = &ctrl_reg_2_3_0_hummer_main;
+		csiphy_dev->hw_version = CSIPHY_VERSION_V230_HUMMER_MAIN;
+		csiphy_dev->is_divisor_32_comp = true;
+		csiphy_dev->clk_lane = 0;
+	} else if (of_device_is_compatible(soc_info->dev->of_node, "qcom,csiphy-petrel")) {
+		csiphy_dev->ctrl_reg = &ctrl_reg_2_3_0_petrel;
+		csiphy_dev->hw_version = CSIPHY_VERSION_V230_PETREL;
+                csiphy_dev->is_divisor_32_comp = true;
+                csiphy_dev->clk_lane = 0;
+	} else if (of_device_is_compatible(soc_info->dev->of_node, "qcom,csiphy-pilotiultrawide")) {
+		csiphy_dev->ctrl_reg = &ctrl_reg_2_3_0_piloti_ultrawide;
+		csiphy_dev->hw_version = CSIPHY_VERSION_V230_PILOTI_ULTRAWIDE;
+		csiphy_dev->is_divisor_32_comp = true;
+		csiphy_dev->clk_lane = 0;
+        } else if (of_device_is_compatible(soc_info->dev->of_node, "qcom,csiphy-pilotimain")) {
+                csiphy_dev->ctrl_reg = &ctrl_reg_2_3_0_piloti_main;
+                csiphy_dev->hw_version = CSIPHY_VERSION_V230_PILOTI_MAIN;
+                csiphy_dev->is_divisor_32_comp = true;
+                csiphy_dev->clk_lane = 0;
+	} else if (of_device_is_compatible(soc_info->dev->of_node, "qcom,csiphy-paganifront")) {
+		csiphy_dev->ctrl_reg = &ctrl_reg_2_3_0_pagani_front;
+		csiphy_dev->hw_version = CSIPHY_VERSION_V230_PAGANI_FRONT;
+		csiphy_dev->is_divisor_32_comp = true;
+		csiphy_dev->clk_lane = 0;
+	} else if (of_device_is_compatible(soc_info->dev->of_node, "qcom,csiphy-paganimain")) {
+		csiphy_dev->ctrl_reg = &ctrl_reg_2_3_0_pagani_main;
+		csiphy_dev->hw_version = CSIPHY_VERSION_V230_PAGANI_MAIN;
+		csiphy_dev->is_divisor_32_comp = true;
+		csiphy_dev->clk_lane = 0;
+#endif
 	} else {
 		CAM_ERR(CAM_CSIPHY, "invalid hw version : 0x%x",
 			csiphy_dev->hw_version);

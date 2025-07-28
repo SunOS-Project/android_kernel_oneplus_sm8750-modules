@@ -665,7 +665,6 @@ static int cam_soc_util_set_cesta_clk_rate(struct cam_hw_soc_info *soc_info,
 	int32_t src_clk_idx;
 	struct clk *clk = NULL;
 	int rc = 0;
-	bool is_crmb_sup = false;
 
 	if (!soc_info || (soc_info->src_clk_idx < 0) ||
 		(soc_info->src_clk_idx >= CAM_SOC_MAX_CLK)) {
@@ -683,13 +682,9 @@ static int cam_soc_util_set_cesta_clk_rate(struct cam_hw_soc_info *soc_info,
 	/* Only source clocks are supported by this API to set HW client clock votes */
 	src_clk_idx = soc_info->src_clk_idx;
 	clk = soc_info->clk[src_clk_idx];
-	is_crmb_sup = cam_is_crmb_supported(soc_info);
-
-	CAM_DBG(CAM_UTIL, "%s Requested clk [hi lo]:[%llu %llu] cesta_client_idx:%d is_crmb_sup:%d",
-		soc_info->clk_name[src_clk_idx], high_val, low_val, cesta_client_idx, is_crmb_sup);
 
 	if (!skip_mmrm_set_rate && soc_info->mmrm_handle) {
-		if (!is_crmb_sup) {
+		if (!cam_is_crmb_supported(soc_info)) {
 			CAM_DBG(CAM_UTIL,
 				"cesta mmrm hw client: set %s, high-rate %lld low-rate %lld",
 				soc_info->clk_name[src_clk_idx], high_val, low_val);
@@ -711,7 +706,10 @@ static int cam_soc_util_set_cesta_clk_rate(struct cam_hw_soc_info *soc_info,
 		}
 	}
 
-	if (is_crmb_sup) {
+	CAM_DBG(CAM_UTIL, "%s Requested clk rate [high low]: [%llu %llu] cesta_client_idx: %d",
+		soc_info->clk_name[src_clk_idx], high_val, low_val, cesta_client_idx);
+
+	if (cam_is_crmb_supported(soc_info)) {
 
 		/* For CRMB, we pass 0 for nd_idx as we only need a single node for CESTA */
 
@@ -3269,7 +3267,14 @@ int cam_soc_util_get_dt_properties(struct cam_hw_soc_info *soc_info)
 
 	if (of_find_property(of_node, "qcom,cam-cx-ipeak", NULL))
 		rc = cam_cx_ipeak_register_cx_ipeak(soc_info);
-
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	if(!of_property_read_u32(of_node, "iic-freq-mode", &soc_info->i2c_freq_mode)){
+		CAM_INFO(CAM_UTIL, "iic-freq-mode found %u",soc_info->i2c_freq_mode);
+	}
+	else {
+		soc_info->i2c_freq_mode = 0xFF;
+	}
+#endif
 #ifdef CONFIG_SPECTRA_VMRM
 	num_vmrm_resource_ids = of_property_count_u32_elems(of_node, "vmrm-resource-ids");
 
@@ -3290,7 +3295,9 @@ int cam_soc_util_get_dt_properties(struct cam_hw_soc_info *soc_info)
 #endif
 	return rc;
 }
-
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+EXPORT_SYMBOL(cam_soc_util_get_dt_properties);
+#endif
 /**
  * cam_soc_util_get_regulator()
  *
@@ -3333,7 +3340,7 @@ int cam_soc_util_regulator_disable(struct regulator *rgltr,
 		CAM_ERR(CAM_UTIL, "%s regulator_is_enabled failed", rgltr_name);
 		return rc;
 	} else if (rc == 0) {
-		CAM_DBG(CAM_UTIL, "%s regulator already disabled", rgltr_name);
+		CAM_INFO(CAM_UTIL, "%s regulator already disabled", rgltr_name);
 		return rc;
 	}
 
@@ -3371,7 +3378,7 @@ int cam_soc_util_regulator_enable(struct regulator *rgltr,
 	}
 
 	if (cam_wrapper_regulator_count_voltages(rgltr, rgltr_name) > 0) {
-		CAM_DBG(CAM_UTIL, "[%s] voltage min=%d, max=%d",
+		CAM_INFO(CAM_UTIL, "[%s] voltage min=%d, max=%d",
 			rgltr_name, rgltr_min_volt, rgltr_max_volt);
 
 		rc = cam_wrapper_regulator_set_voltage(
@@ -3643,7 +3650,7 @@ static int cam_soc_util_regulator_enable_default(
 	}
 
 	for (j = 0; j < num_rgltr; j++) {
-		CAM_DBG(CAM_UTIL, "[%s] : start regulator %s enable, rgltr_ctrl_support %d",
+		CAM_INFO(CAM_UTIL, "[%s] : start regulator %s enable, rgltr_ctrl_support %d",
 			soc_info->dev_name, soc_info->rgltr_name[j], soc_info->rgltr_ctrl_support);
 		if (soc_info->rgltr_ctrl_support == true) {
 			rc = cam_soc_util_regulator_enable(soc_info->rgltr[j],

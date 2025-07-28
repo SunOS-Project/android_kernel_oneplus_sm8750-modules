@@ -42,6 +42,18 @@
 #define CSIPHY_QMARGIN_DEFAULT_STR   "default"
 #define SETTLE_CNT_ADJUSTMENT_OFFSET 10
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+#define CDR_Test_Mode 0
+#define CDR_Normal_Set_Mpde 1
+
+struct cdr_value {
+	signed int    cdr_val;
+	signed int    cdr_set_status;
+};
+
+static struct cdr_value input_cdr_value = {0,1};
+#endif
+
 struct g_csiphy_data {
 	void __iomem *base_address;
 	uint8_t is_3phase;
@@ -1513,8 +1525,13 @@ static inline void __cam_csiphy_compute_cdr_value(
 		*cdr_val -= csiphy_device->cdr_params.cdr_tolerance;
 }
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+static int oplus_cam_csiphy_cphy_data_rate_config(struct csiphy_device *csiphy_device, int32_t idx,
+	uint8_t datarate_variant_idx, int32_t input_cdr_val, int32_t cdr_set_status)
+#else
 static int cam_csiphy_cphy_data_rate_config(struct csiphy_device *csiphy_device, int32_t idx,
 	uint8_t datarate_variant_idx)
+#endif
 {
 	int i, j = 0, rc = 0;
 	unsigned int data_rate_idx;
@@ -1650,6 +1667,13 @@ static int cam_csiphy_cphy_data_rate_config(struct csiphy_device *csiphy_device,
 				(channel_type == CAM_CSIPHY_DATARATE_STANDARD_CHANNEL)) ||
 				reg_param_type == CSIPHY_CDR_LN_SETTINGS) {
 				int32_t cdr_val = reg_data;
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+				if (cdr_set_status == CDR_Test_Mode)
+				{
+					cdr_val = input_cdr_val;
+					CAM_DBG(CAM_CSIPHY, "[CDR MIPI]using cdr_val: %d from config, cdr_set_status: %d",cdr_val, cdr_set_status);
+				}
+#endif
 				struct cam_csiphy_dev_cdr_sweep_params *cdr_params =
 					&csiphy_device->cdr_params;
 
@@ -1763,8 +1787,14 @@ static int cam_csiphy_program_secure_mode(struct csiphy_device *csiphy_dev,
 	return rc;
 }
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+int32_t oplus_cam_csiphy_config_dev(struct csiphy_device *csiphy_dev,
+	int32_t dev_handle, uint8_t datarate_variant_idx,
+	int32_t input_cdr_val, int32_t cdr_set_status)
+#else
 int32_t cam_csiphy_config_dev(struct csiphy_device *csiphy_dev,
 	int32_t dev_handle, uint8_t datarate_variant_idx)
+#endif
 {
 	int32_t      rc = 0;
 	uint32_t     lane_enable = 0;
@@ -1852,7 +1882,11 @@ int32_t cam_csiphy_config_dev(struct csiphy_device *csiphy_dev,
 	lane_enable = csiphy_dev->csiphy_info[index].lane_enable;
 
 	if (csiphy_dev->csiphy_info[index].csiphy_3phase) {
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+		rc = oplus_cam_csiphy_cphy_data_rate_config(csiphy_dev, index, datarate_variant_idx, input_cdr_val, cdr_set_status);
+#else
 		rc = cam_csiphy_cphy_data_rate_config(csiphy_dev, index, datarate_variant_idx);
+#endif
 		if (rc) {
 			CAM_ERR(CAM_CSIPHY,
 				"Date rate specific configuration failed rc: %d",
@@ -2530,6 +2564,21 @@ int32_t cam_csiphy_core_cfg(void *phy_dev,
 	CAM_DBG(CAM_CSIPHY, "Opcode received: %d", cmd->op_code);
 	mutex_lock(&csiphy_dev->mutex);
 	switch (cmd->op_code) {
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	case CAM_SET_CDR_VALUE: {
+		rc = copy_from_user(&input_cdr_value, (void __user *)cmd->handle,
+			sizeof(input_cdr_value));
+		if (rc < 0) {
+			CAM_ERR(CAM_CSIPHY, "[CDR MIPI]Failed copying from User");
+			goto release_mutex;
+		}
+		else
+		{
+			CAM_DBG(CAM_CSIPHY, "[CDR MIPI]cdr_val: %d, cdr_set_status: %d",input_cdr_value.cdr_val,input_cdr_value.cdr_set_status);
+		}
+		break;
+	}
+#endif
 	case CAM_ACQUIRE_DEV: {
 		struct cam_sensor_acquire_dev csiphy_acq_dev;
 		struct cam_csiphy_acquire_dev_info csiphy_acq_params;
@@ -3030,8 +3079,13 @@ int32_t cam_csiphy_core_cfg(void *phy_dev,
 			}
 
 			if (csiphy_dev->csiphy_info[offset].csiphy_3phase) {
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+				rc = oplus_cam_csiphy_cphy_data_rate_config(
+					csiphy_dev, offset, data_rate_variant_idx, input_cdr_value.cdr_val, input_cdr_value.cdr_set_status);
+#else
 				rc = cam_csiphy_cphy_data_rate_config(
 					csiphy_dev, offset, data_rate_variant_idx);
+#endif
 				if (rc) {
 					CAM_ERR(CAM_CSIPHY,
 						"Data rate specific configuration failed rc: %d",
@@ -3128,7 +3182,11 @@ int32_t cam_csiphy_core_cfg(void *phy_dev,
 				CAM_CSIPHY_PRGM_INDVDL);
 		}
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+		rc = oplus_cam_csiphy_config_dev(csiphy_dev, config.dev_handle, data_rate_variant_idx, input_cdr_value.cdr_val, input_cdr_value.cdr_set_status);
+#else
 		rc = cam_csiphy_config_dev(csiphy_dev, config.dev_handle, data_rate_variant_idx);
+#endif
 		if (rc < 0) {
 			CAM_ERR(CAM_CSIPHY, "cam_csiphy_config_dev failed");
 			cam_csiphy_disable_hw(csiphy_dev, offset);

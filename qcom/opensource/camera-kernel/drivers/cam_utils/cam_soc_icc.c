@@ -177,7 +177,7 @@ int cam_soc_bus_client_update_bw(void *client, uint64_t ab, uint64_t ib,
 		(struct cam_soc_bus_client_data *) bus_client->client_data;
 	int rc = 0;
 
-	CAM_DBG(CAM_PERF, "Bus client=[%s] [%s] :ab[%llu] ib[%llu]",
+	CAM_INFO(CAM_PERF, "Bus client=[%s] [%s] :ab[%llu] ib[%llu]",
 		bus_client->common_data->name, cam_soc_bus_path_data_to_str(bus_path_data),
 		ab, ib);
 

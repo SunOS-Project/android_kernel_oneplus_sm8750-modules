@@ -40,6 +40,26 @@ enum cam_sensor_state_t {
 	CAM_SENSOR_START,
 };
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+struct cam_sensor_qsc_setting {
+	uint32_t                          qsc_reg_addr;
+	uint32_t                          eeprom_slave_addr;
+	uint32_t                          qsc_data_size;
+	uint32_t                          enable_qsc_write_in_advance;
+	uint32_t                          write_qsc_addr;
+	bool                              read_qsc_success;
+	struct cam_sensor_i2c_reg_setting qsc_setting;
+	enum cam_sensor_setting_state     qscsetting_state;
+};
+#endif
+
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+struct sensor_vsync_info {
+	uint32_t                          vsync_enable_reg_addr;
+	uint32_t                          vsync_enable;
+	uint32_t                          vsync_disable;
+};
+#endif
 /**
  * struct sensor_intf_params
  * @device_hdl: Device Handle
@@ -161,6 +181,28 @@ struct cam_sensor_ctrl_t {
 	bool                           is_res_info_updated;
 	uint64_t                       last_applied_done_timestamp;
 	bool                           hw_no_ops;
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	int                            is_support_laser;
+	int                            pid;
+	struct mutex                   sensor_power_state_mutex;
+	struct mutex                   sensor_initsetting_mutex;
+	enum cam_sensor_power_state    sensor_power_state;
+	enum cam_sensor_setting_state  sensor_initsetting_state;
+	struct task_struct             *sensor_open_thread;
+	struct cam_sensor_i2c_reg_setting sensor_init_setting;
+	struct cam_sensor_qsc_setting  sensor_qsc_setting;
+	bool                           is_surpport_wr_continuous;
+	uint32_t                       sensor_setting_id;
+	bool                           cam_sensor_init_completed;
+	uint8_t                        cam_sensor_reg_otp[CAM_OEM_OTP_DATA_MAX_LENGTH];
+	uint32_t                       swremosaic_sensor_id;
+	uint32_t                       is_need_framedrop;
+	uint32_t                       streamon_num;
+	bool                           need_write_probe_register;
+	struct cam_sensor_i2c_reg_setting probe_reg_setting;
+	bool                           is_in_high_level;
+	struct sensor_vsync_info	   vsync_info;
+#endif
 };
 
 /**

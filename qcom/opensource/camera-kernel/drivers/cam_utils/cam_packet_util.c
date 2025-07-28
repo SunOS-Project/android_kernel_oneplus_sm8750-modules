@@ -62,6 +62,9 @@ int cam_packet_util_validate_cmd_desc(struct cam_cmd_buf_desc *cmd_desc)
 
 	return 0;
 }
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+EXPORT_SYMBOL(cam_packet_util_validate_cmd_desc);
+#endif
 
 int cam_packet_util_validate_packet(struct cam_packet *packet,
 	size_t remain_len)
@@ -105,6 +108,9 @@ int cam_packet_util_validate_packet(struct cam_packet *packet,
 
 	return 0;
 }
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+EXPORT_SYMBOL(cam_packet_util_validate_packet);
+#endif
 
 int cam_packet_util_copy_pkt_to_kmd(struct cam_packet *packet_u, struct cam_packet **packet,
 		size_t remain_len)

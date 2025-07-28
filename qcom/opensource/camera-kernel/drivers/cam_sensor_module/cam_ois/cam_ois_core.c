@@ -16,6 +16,9 @@
 #include "cam_common_util.h"
 #include "cam_packet_util.h"
 #include "cam_mem_mgr_api.h"
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+#include "oplus_cam_ois.h"
+#endif
 
 #define CAM_OIS_FW_VERSION_CHECK_MASK 0x1
 
@@ -207,7 +210,11 @@ cci_failure:
  *
  * Returns success or failure
  */
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+int cam_ois_power_down(struct cam_ois_ctrl_t *o_ctrl)
+#else
 static int cam_ois_power_down(struct cam_ois_ctrl_t *o_ctrl)
+#endif
 {
 	int32_t                         rc = 0;
 	struct cam_sensor_power_ctrl_t  *power_info;
@@ -241,6 +248,9 @@ static int cam_ois_power_down(struct cam_ois_ctrl_t *o_ctrl)
 
 	return rc;
 }
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+EXPORT_SYMBOL(cam_ois_power_down);
+#endif
 
 static int cam_ois_update_time(struct i2c_settings_array *i2c_set,
 	enum cam_endianness_type endianness)
@@ -333,6 +343,9 @@ static int cam_ois_apply_settings(struct cam_ois_ctrl_t *o_ctrl,
 		if (i2c_list->op_code ==  CAM_SENSOR_I2C_WRITE_RANDOM) {
 			rc = camera_io_dev_write(&(o_ctrl->io_master_info),
 				&(i2c_list->i2c_settings));
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+			CAM_INFO(CAM_OIS,"type=%d write ois register addr=0x%x data=0x%x ",o_ctrl->ois_type,i2c_list->i2c_settings.reg_setting->reg_addr,i2c_list->i2c_settings.reg_setting->reg_data);
+#endif
 			if (rc < 0) {
 				CAM_ERR(CAM_OIS,
 					"Failed in Applying i2c wrt settings");
@@ -1086,7 +1099,11 @@ release_firmware:
  *
  * Returns success or failure
  */
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+int cam_ois_pkt_parse(struct cam_ois_ctrl_t *o_ctrl, void *arg)
+#else
 static int cam_ois_pkt_parse(struct cam_ois_ctrl_t *o_ctrl, void *arg)
+#endif
 {
 	int32_t                         rc = 0;
 	int32_t                         i = 0;
@@ -1295,12 +1312,18 @@ static int cam_ois_pkt_parse(struct cam_ois_ctrl_t *o_ctrl, void *arg)
 		}
 
 		CAM_DBG(CAM_OIS, "ois_fw_flag: %d", o_ctrl->ois_fw_flag);
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+		trace_begin("%d_%d_%s Download FW", o_ctrl->cci_num, o_ctrl->cci_i2c_master, o_ctrl->ois_name);
+#endif
 		if (o_ctrl->ois_fw_flag) {
 			CAM_DBG(CAM_OIS, "fw_count: %d", o_ctrl->fw_info.fw_count);
 			if (o_ctrl->fw_info.fw_count != 0) {
 				rc = cam_ois_fw_download_v2(o_ctrl);
 				if (rc) {
 					CAM_ERR(CAM_OIS, "Failed OIS FW Download v2");
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+					trace_end();
+#endif
 					goto pwr_dwn;
 				}
 			} else {
@@ -1320,6 +1343,9 @@ static int cam_ois_pkt_parse(struct cam_ois_ctrl_t *o_ctrl, void *arg)
 						CAM_ERR(CAM_OIS,
 							"Cannot apply fwinit data %d",
 							rc);
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+						trace_end();
+#endif
 						goto pwr_dwn;
 					} else {
 						CAM_DBG(CAM_OIS, "OIS fwinit settings success");
@@ -1328,11 +1354,17 @@ static int cam_ois_pkt_parse(struct cam_ois_ctrl_t *o_ctrl, void *arg)
 					rc = cam_ois_fw_download(o_ctrl);
 					if (rc) {
 						CAM_ERR(CAM_OIS, "Failed OIS FW Download");
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+						trace_end();
+#endif
 						goto pwr_dwn;
 					}
 				}
 			}
 		}
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+		trace_end();
+#endif
 		if (o_ctrl->i2c_init_data.is_settings_valid == 1)
 		{
 			rc = cam_ois_apply_settings(o_ctrl, &o_ctrl->i2c_init_data);
@@ -1498,6 +1530,43 @@ static int cam_ois_pkt_parse(struct cam_ois_ctrl_t *o_ctrl, void *arg)
 			goto end;
 		}
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+		if (o_ctrl->ois_eis_function == 5) {
+			rc = OIS_READ_HALL_DATA_TO_UMD_Bu24721(o_ctrl,&i2c_read_settings);
+			if (rc < 0) {
+				CAM_ERR(CAM_OIS, "cannot read data rc: %d", rc);
+				delete_request(&i2c_read_settings);
+				cam_mem_put_cpu_buf(dev_config.packet_handle);
+				return rc;
+			}
+		} else if (o_ctrl->ois_eis_function == 6) {
+			rc = OIS_READ_HALL_DATA_TO_UMD_SEM1217S(o_ctrl,&i2c_read_settings);
+			if (rc < 0) {
+				CAM_ERR(CAM_OIS, "cannot read data rc: %d", rc);
+				delete_request(&i2c_read_settings);
+				cam_mem_put_cpu_buf(dev_config.packet_handle);
+				return rc;
+			}
+		} else if (o_ctrl->ois_eis_function == 7) {
+			rc = OIS_READ_HALL_DATA_TO_UMD_DW9786(o_ctrl,&i2c_read_settings);
+			if (rc < 0) {
+				CAM_ERR(CAM_OIS, "cannot read data rc: %d", rc);
+				delete_request(&i2c_read_settings);
+				cam_mem_put_cpu_buf(dev_config.packet_handle);
+				return rc;
+			}
+		} else {
+			rc = cam_sensor_i2c_read_data(
+				&i2c_read_settings,
+				&o_ctrl->io_master_info);
+			if (rc < 0) {
+				CAM_ERR(CAM_OIS, "cannot read data rc: %d", rc);
+				delete_request(&i2c_read_settings);
+				cam_mem_put_cpu_buf(dev_config.packet_handle);
+				return rc;
+			}
+		}
+#else
 		rc = cam_sensor_i2c_read_data(
 			&i2c_read_settings,
 			&o_ctrl->io_master_info);
@@ -1506,6 +1575,7 @@ static int cam_ois_pkt_parse(struct cam_ois_ctrl_t *o_ctrl, void *arg)
 			delete_request(&i2c_read_settings);
 			goto end;
 		}
+#endif
 
 		if (csl_packet->num_io_configs > 1) {
 			rc = cam_sensor_util_write_qtimer_to_io_buffer(
@@ -1593,6 +1663,9 @@ put_ref:
 	cam_mem_put_cpu_buf(dev_config.packet_handle);
 	return rc;
 }
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+EXPORT_SYMBOL(cam_ois_pkt_parse);
+#endif
 
 void cam_ois_shutdown(struct cam_ois_ctrl_t *o_ctrl)
 {
@@ -1662,6 +1735,9 @@ void cam_ois_shutdown(struct cam_ois_ctrl_t *o_ctrl)
 
 	o_ctrl->cam_ois_state = CAM_OIS_INIT;
 }
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+EXPORT_SYMBOL(cam_ois_shutdown);
+#endif
 
 /**
  * cam_ois_driver_cmd - Handle ois cmds
@@ -1824,3 +1900,6 @@ release_mutex:
 	mutex_unlock(&(o_ctrl->ois_mutex));
 	return rc;
 }
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+EXPORT_SYMBOL(cam_ois_driver_cmd);
+#endif

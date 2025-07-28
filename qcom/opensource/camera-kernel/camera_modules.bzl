@@ -245,8 +245,20 @@ def _define_module(target, variant):
             "CONFIG_SPECTRA_VMRM": {
                 True: ["drivers/cam_vmrm/qrtr/cam_qrtr_comms.c"],
             },
+            "CONFIG_SPECTRA_OPLUS": {
+                True: [
+                    "drivers/oplus/cam_sensor_module/cam_module_utils/cam_kevent_fb_custom.c",
+                    "drivers/oplus/cam_sensor_module/cam_module_utils/cam_trace_custom.c",
+                    "drivers/oplus/cam_sensor_module/cam_link/oplus_cam_eeprom.c",
+                    "drivers/oplus/cam_sensor_module/cam_link/oplus_cam_sensor.c",
+                    "drivers/oplus/cam_sensor_module/cam_link/oplus_cam_ois.c",
+                    "drivers/oplus/cam_sensor_module/cam_link/oplus_cam_actuator.c",
+                    "drivers/oplus/cam_sensor_module/cam_link/oplus_cam_insensor_eeprom.c",
+                ],
+            },
         },
         copts = ["-include", "$(location :camera_banner)"],
+        local_defines = ["OPLUS_FEATURE_CAMERA_COMMON", "FEATURE_ENABLE=1"],
         deps = deps,
         kconfig = "Kconfig",
         defconfig = "{}_defconfig_generated".format(tv),

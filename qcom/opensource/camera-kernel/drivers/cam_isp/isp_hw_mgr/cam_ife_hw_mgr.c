@@ -44,6 +44,9 @@
 	(CAM_ISP_GENERIC_BLOB_TYPE_CSID_QCFA_CONFIG + 1)
 
 #define MAX_INTERNAL_RECOVERY_ATTEMPTS    1
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+#define MAX_ERROR_CNT_AFTER_RECOVERY      3
+#endif
 
 #define MAX_PARAMS_FOR_IRQ_INJECT     5
 #define IRQ_INJECT_DISPLAY_BUF_LEN    4096
@@ -1386,7 +1389,11 @@ static bool cam_ife_hw_mgr_is_sfe_rd_res(
 
 static int cam_ife_hw_mgr_reset_csid(
 	struct cam_ife_hw_mgr_ctx  *ctx,
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	int reset_type, bool power_on_rst)
+#else
 	int reset_type)
+#endif
 {
 	int i;
 	int rc = 0;
@@ -1412,6 +1419,9 @@ static int cam_ife_hw_mgr_reset_csid(
 
 			reset_args.reset_type = reset_type;
 			reset_args.node_res = hw_mgr_res->hw_res[i];
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+			reset_args.power_on_reset = power_on_rst;
+#endif
 			rc  = hw_intf->hw_ops.reset(hw_intf->hw_priv,
 				&reset_args, sizeof(reset_args));
 			if (rc)
@@ -1632,9 +1642,13 @@ static void cam_ife_hw_mgr_deinit_hw(
 	}
 
 	hw_mgr = ctx->hw_mgr;
-
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	if (hw_mgr->csid_global_reset_en)
+		cam_ife_hw_mgr_reset_csid(ctx, CAM_IFE_CSID_RESET_GLOBAL, false);
+#else
 	if (hw_mgr->csid_global_reset_en)
 		cam_ife_hw_mgr_reset_csid(ctx, CAM_IFE_CSID_RESET_GLOBAL);
+#endif
 
 	/* Deinit IFE CSID */
 	list_for_each_entry(hw_mgr_res, &ctx->res_list_ife_csid, list) {
@@ -1705,6 +1719,9 @@ static int cam_ife_hw_mgr_init_hw(
 	struct cam_ife_hw_mgr_ctx *ctx)
 {
 	struct cam_isp_hw_mgr_res *hw_mgr_res;
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	struct cam_ife_hw_mgr     *hw_mgr;
+#endif
 	int rc = 0, i;
 
 	/* INIT IFE SRC */
@@ -1783,6 +1800,17 @@ static int cam_ife_hw_mgr_init_hw(
 			goto deinit;
 		}
 	}
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	hw_mgr = ctx->hw_mgr;
+	if (hw_mgr->csid_global_reset_en) {
+		rc = cam_ife_hw_mgr_reset_csid(ctx,
+			CAM_IFE_CSID_RESET_GLOBAL, true);
+		if (rc) {
+			CAM_ERR(CAM_ISP, "CSID reset failed, ctx_idx:%u", ctx->ctx_index);
+			goto deinit;
+		}
+	}
+#endif
 
 	/* Check if any cache needs to be activated */
 	for (i = CAM_LLCC_SMALL_1; i <= CAM_LLCC_LARGE_4; i++) {
@@ -6190,9 +6218,19 @@ static int cam_ife_mgr_acquire_hw(void *hw_mgr_priv, void *acquire_hw_args)
 	ife_ctx->common.sec_pf_evt_cb = acquire_args->sec_pf_evt_cb;
 	ife_ctx->try_recovery_cnt = 0;
 	ife_ctx->recovery_req_id = 0;
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	ife_ctx->error_cnt_after_recovery = 0;
+#endif
 	ife_ctx->drv_path_idle_en = 0;
 	ife_ctx->res_list_ife_out = NULL;
 	ife_ctx->res_list_sfe_out = NULL;
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	ife_ctx->rdi0_sof_timestamp = 0;
+	ife_ctx->rdi0_eof_timestamp = 0;
+	ife_ctx->rdi1_sof_timestamp = 0;
+	ife_ctx->active_frame_duration = 0;
+	ife_ctx->sof_to_sof = 0;
+#endif
 	ife_ctx->pri_rdi_out_res = g_ife_hw_mgr.isp_caps.max_vfe_out_res_type;
 	ife_ctx->ctx_index = acquire_args->ctx_id;
 	ife_ctx->scratch_buf_info.ife_scratch_config = NULL;
@@ -7653,6 +7691,10 @@ static int cam_ife_mgr_config_hw(
 	struct cam_ife_hw_mgr *ife_hw_mgr;
 	unsigned long rem_jiffies = 0;
 	bool is_cdm_hung = false;
+
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	uint64_t curr_timestamp, delta, frame_duration, delay_ns = 0;
+#endif
 	size_t len = 0;
 	uint32_t *buf_addr = NULL, *buf_start = NULL, *buf_end = NULL;
 	uint32_t cmd_type = 0;
@@ -7700,7 +7742,37 @@ static int cam_ife_mgr_config_hw(
 			"Ctx[%pK][%u] Reset overflow recovery count for req %llu",
 			ctx, ctx->ctx_index, cfg->request_id);
 	}
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	CAM_GET_TIMESTAMP_NS(curr_timestamp);
+	if (ctx->curr_num_exp >= 2) {
+		if ((curr_timestamp > ctx->rdi1_sof_timestamp) &&
+			(ctx->active_frame_duration)) {
+			delta = curr_timestamp - ctx->rdi1_sof_timestamp;
+			if ((ctx->active_frame_duration < ctx->sof_to_sof) &&
+				(ctx->active_frame_duration * 2 > ctx->sof_to_sof)) {
+				frame_duration = ctx->sof_to_sof;
+			} else
+				frame_duration = ctx->active_frame_duration + 2000000;
 
+			/*
+			 * It means current isn't in betwwen RDI1 SOF-EOF, but it is in
+			 * RDI0 SOF-EOF.
+			 */
+			if ((delta > ctx->active_frame_duration) &&
+				(curr_timestamp - ctx->rdi0_sof_timestamp < ctx->active_frame_duration)) {
+				delay_ns = frame_duration + ctx->rdi0_sof_timestamp - curr_timestamp;
+				if (delay_ns < 1000000)
+					usleep_range(1000, 1010);
+				else
+					usleep_range(delay_ns / 1000, delay_ns / 1000 + 10);
+				CAM_INFO(CAM_ISP,
+					"Bad timing, active duration:%llu, curr ts:%llu sof to sof ts:%llu rdi0 sof ts:%llu, rdi1 sof ts:%llu, delay %llu ns",
+					ctx->active_frame_duration, curr_timestamp, ctx->sof_to_sof,
+					ctx->rdi0_sof_timestamp, ctx->rdi1_sof_timestamp, delay_ns);
+			}
+		}
+	}
+#endif
 	rc = cam_ife_hw_mgr_irq_injection(ife_hw_mgr, cfg->request_id);
 	if (rc)
 		CAM_ERR(CAM_ISP, "Failed to inject IRQ at req %d",
@@ -8028,6 +8100,11 @@ skip_bw_clk_update:
 				if (hw_update_data->mup_en) {
 					ctx->current_mup = hw_update_data->mup_val;
 					ctx->curr_num_exp = hw_update_data->num_exp;
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+					ctx->active_frame_duration = 0;
+					ctx->rdi0_sof_timestamp = 0;
+					ctx->sof_to_sof = 0;
+#endif
 				}
 				hw_update_data->mup_en = false;
 
@@ -8992,7 +9069,11 @@ static int cam_ife_mgr_reset(void *hw_mgr_priv, void *hw_reset_args)
 
 	CAM_DBG(CAM_ISP, "Reset CSID and VFE, ctx_idx: %u", ctx->ctx_index);
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	rc = cam_ife_hw_mgr_reset_csid(ctx, CAM_IFE_CSID_RESET_PATH, false);
+#else
 	rc = cam_ife_hw_mgr_reset_csid(ctx, CAM_IFE_CSID_RESET_PATH);
+#endif
 
 	if (rc) {
 		CAM_ERR(CAM_ISP, "Failed to reset CSID:%d rc: %d ctx_idx: %u",
@@ -16072,6 +16153,68 @@ static int cam_ife_mgr_recover_hw(void *priv, void *data)
 	/* Here recovery is performed */
 	CAM_DBG(CAM_ISP, "ErrorType = %d", error_type);
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	if (!recovery_data->affected_ctx[0]) {
+		CAM_ERR(CAM_ISP,
+			"No context is affected but recovery called");
+		goto end;
+	}
+	/* stop resources here */
+	CAM_DBG(CAM_ISP, "STOP: Number of affected context: %d",
+		recovery_data->no_of_context);
+	for (i = 0; i < recovery_data->no_of_context; i++) {
+		stop_args.ctxt_to_hw_map =
+			recovery_data->affected_ctx[i];
+		rc = cam_ife_mgr_stop_hw_in_overflow(&stop_args);
+		if (rc) {
+			CAM_ERR(CAM_ISP, "CTX stop failed(%d) ctx_idx: %u",
+				rc, ctx->ctx_index);
+			goto end;
+		}
+	}
+
+	if (!g_ife_hw_mgr.debug_cfg.enable_recovery)
+		goto end;
+
+	CAM_DBG(CAM_ISP, "RESET: CSID PATH");
+	for (i = 0; i < recovery_data->no_of_context; i++) {
+		ctx = recovery_data->affected_ctx[i];
+		rc = cam_ife_hw_mgr_reset_csid(ctx,
+				CAM_IFE_CSID_RESET_PATH, false);
+
+		if (rc) {
+			CAM_ERR(CAM_ISP, "Failed RESET, ctx_idx: %u", ctx->ctx_index);
+			goto end;
+		}
+	}
+
+	CAM_DBG(CAM_ISP, "RESET: Calling VFE reset");
+
+	for (i = 0; i < CAM_IFE_HW_NUM_MAX; i++) {
+		if (recovery_data->affected_core[i])
+			cam_ife_mgr_reset_vfe_hw(ife_hw_mgr, i);
+	}
+
+	CAM_DBG(CAM_ISP, "START: Number of affected context: %d",
+		recovery_data->no_of_context);
+
+	for (i = 0; i < recovery_data->no_of_context; i++) {
+		ctx =  recovery_data->affected_ctx[i];
+		start_args.ctxt_to_hw_map = ctx;
+
+		rc = cam_ife_mgr_restart_hw(&start_args);
+		if (rc) {
+			CAM_ERR(CAM_ISP, "CTX start failed(%d) ctx_idx: %u",
+				rc, ctx->ctx_index);
+			goto end;
+		}
+		CAM_DBG(CAM_ISP, "Started resources rc (%d) ctx_idx: %u",
+			rc, ctx->ctx_index);
+	}
+
+	atomic_set(&ctx->overflow_pending, 0);
+	CAM_DBG(CAM_ISP, "Recovery Done rc (%d)", rc);
+#else
 	switch (error_type) {
 	case CAM_ISP_HW_ERROR_OVERFLOW:
 	case CAM_ISP_HW_ERROR_CSID_LANE_FIFO_OVERFLOW:
@@ -16113,8 +16256,13 @@ static int cam_ife_mgr_recover_hw(void *priv, void *data)
 		CAM_DBG(CAM_ISP, "RESET: CSID PATH");
 		for (i = 0; i < recovery_data->no_of_context; i++) {
 			ctx = recovery_data->affected_ctx[i];
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+			rc = cam_ife_hw_mgr_reset_csid(ctx,
+				CAM_IFE_CSID_RESET_PATH, false);
+#else
 			rc = cam_ife_hw_mgr_reset_csid(ctx,
 				CAM_IFE_CSID_RESET_PATH);
+#endif
 
 			if (rc) {
 				CAM_ERR(CAM_ISP, "Failed RESET, ctx_idx: %u", ctx->ctx_index);
@@ -16157,10 +16305,15 @@ static int cam_ife_mgr_recover_hw(void *priv, void *data)
 	default:
 		CAM_ERR(CAM_ISP, "Invalid Error");
 	}
+#endif
 	CAM_DBG(CAM_ISP, "Exit: ErrorType = %d", error_type);
 
 end:
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	CAM_MEM_FREE(recovery_data);
+#else
 	kfree(recovery_data);
+#endif
 	return rc;
 }
 
@@ -16304,14 +16457,54 @@ static int  cam_ife_hw_mgr_find_affected_ctx(
 			affected_core, CAM_IFE_HW_NUM_MAX))
 			continue;
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+		notify_err_cb = ife_hwr_mgr_ctx->common.event_cb;
+#endif
+
 		if (!force_recover && atomic_read(&ife_hwr_mgr_ctx->overflow_pending)) {
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+			CAM_DBG(CAM_ISP, "CTX:%u already error reported",
+				ife_hwr_mgr_ctx->ctx_index);
+			if (error_event_data->try_internal_recovery)
+				ife_hwr_mgr_ctx->error_cnt_after_recovery++;
+
+			if (ife_hwr_mgr_ctx->error_cnt_after_recovery <=MAX_ERROR_CNT_AFTER_RECOVERY) {
+				CAM_INFO(CAM_ISP, "CTX:%u already error reported",
+					ife_hwr_mgr_ctx->ctx_index);
+					continue;
+			} else {
+				error_event_data->try_internal_recovery = false;
+				CAM_INFO(CAM_ISP, "CTX:%u already %u error reported",
+				ife_hwr_mgr_ctx->ctx_index,
+				ife_hwr_mgr_ctx->error_cnt_after_recovery);
+				/*
+				* In the call back function corresponding ISP context
+				* will update CRM about fatal Error
+				*/
+				if (notify_err_cb){
+					notify_err_cb(ife_hwr_mgr_ctx->common.cb_priv,
+						CAM_ISP_HW_EVENT_ERROR,
+						(void *)error_event_data);
+				} else {
+						CAM_WARN(CAM_ISP, "Error call back is not set, ctx_idx: %u",
+						ife_hwr_mgr_ctx->ctx_index);
+						goto end;
+				}
+			}
+#else
+
 			CAM_INFO(CAM_ISP, "CTX:%u already error reported",
 				ife_hwr_mgr_ctx->ctx_index);
+#endif
 			continue;
 		}
 
 		atomic_set(&ife_hwr_mgr_ctx->overflow_pending, 1);
-		notify_err_cb = ife_hwr_mgr_ctx->common.event_cb;
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+		//notify_err_cb = ife_hwr_mgr_ctx->common.event_cb;
+#else
+ 		notify_err_cb = ife_hwr_mgr_ctx->common.event_cb;
+#endif
 
 		/* Add affected_context in list of recovery data */
 		CAM_DBG(CAM_ISP, "Add affected ctx %u to list",
@@ -17299,6 +17492,10 @@ static int cam_ife_hw_mgr_handle_hw_buf_done(
 	buf_done_event_data.comp_group_id = bufdone_evt_info->comp_grp_id;
 	buf_done_event_data.is_early_done = bufdone_evt_info->is_early_done;
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	if (ife_hw_mgr_ctx->error_cnt_after_recovery)
+		ife_hw_mgr_ctx->error_cnt_after_recovery = 0;
+#endif
 	if (atomic_read(&ife_hw_mgr_ctx->overflow_pending))
 		return 0;
 
@@ -17421,7 +17618,27 @@ static int cam_ife_hw_mgr_handle_sfe_event(
 	case CAM_ISP_HW_EVENT_DONE:
 		rc = cam_ife_hw_mgr_handle_hw_buf_done(ctx, event_info);
 		break;
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	case CAM_ISP_HW_EVENT_SOF:
+		if (event_info->res_id == CAM_ISP_HW_SFE_IN_RDI0)
+			CAM_GET_TIMESTAMP_NS(ctx->rdi0_sof_timestamp);
+		else if (event_info->res_id == CAM_ISP_HW_SFE_IN_RDI1) {
+			CAM_GET_TIMESTAMP_NS(ctx->rdi1_sof_timestamp);
+			if (ctx->rdi0_sof_timestamp && ctx->rdi1_sof_timestamp > ctx->rdi0_sof_timestamp)
+				ctx->sof_to_sof = ctx->rdi1_sof_timestamp - ctx->rdi0_sof_timestamp;
+		}
+		break;
 
+	case CAM_ISP_HW_EVENT_EOF:
+		if ((event_info->res_id == CAM_ISP_HW_SFE_IN_RDI0) &&
+			(ctx->active_frame_duration == 0)) {
+			CAM_GET_TIMESTAMP_NS(ctx->rdi0_eof_timestamp);
+			if (ctx->rdi0_sof_timestamp && (ctx->rdi0_eof_timestamp > ctx->rdi0_sof_timestamp)) {
+				ctx->active_frame_duration = ctx->rdi0_eof_timestamp - ctx->rdi0_sof_timestamp;
+			}
+		}
+		break;
+#endif
 	default:
 		CAM_WARN(CAM_ISP, "Event: %u not handled for SFE, ctx_idx: %u",
 			evt_id, ctx->ctx_index);

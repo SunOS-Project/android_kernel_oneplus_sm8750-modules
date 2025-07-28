@@ -994,6 +994,8 @@ static irqreturn_t cam_cpastop_handle_irq(int irq_num, void *data)
 
 	regbase_idx = cpas_core->regbase_index[camnoc_info[camnoc_idx]->reg_base];
 
+	CAM_INFO(CAM_CPAS, "CPAS HW Power Status: %d, %d", cpas_hw->hw_state, CAM_HW_STATE_POWER_UP);
+
 	payload->irq_status = cam_io_r_mb(soc_info->reg_map[regbase_idx].mem_base +
 		camnoc_info[camnoc_idx]->irq_sbm->sbm_status.offset);
 	payload->camnoc_idx = camnoc_idx;

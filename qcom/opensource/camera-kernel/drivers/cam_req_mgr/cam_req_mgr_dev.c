@@ -33,12 +33,26 @@
 #include "cam_mem_mgr_api.h"
 #include "cam_req_mgr_debug.h"
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+#include <cam_kevent_fb_custom.h>
+#include <cam_trace_custom.h>
+#endif
+
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+#define CAM_REQ_MGR_EVENT_MAX 90
+#else
 #define CAM_REQ_MGR_EVENT_MAX 30
+#endif
 #define CAM_I3C_MASTER_COMPAT "qcom,geni-i3c"
 
 static struct cam_req_mgr_device g_dev;
 struct kmem_cache *g_cam_req_mgr_timer_cachep;
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+struct list_head cam_req_mgr_ordered_sd_list;
+EXPORT_SYMBOL(cam_req_mgr_ordered_sd_list);
+#else
 static struct list_head cam_req_mgr_ordered_sd_list;
+#endif
 
 DECLARE_RWSEM(rwsem_lock);
 
@@ -355,6 +369,10 @@ static long cam_private_ioctl(struct file *file, void *fh,
 {
 	int rc = 0;
 	struct cam_control *k_ioctl;
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	pid_t new_pid = task_tgid_nr(current);
+	set_camera_provider_pid(new_pid);
+#endif
 
 	if ((!arg) || (cmd != VIDIOC_CAM_CONTROL))
 		return -EINVAL;
@@ -920,11 +938,20 @@ void cam_subdev_notify_message(u32 subdev_type,
 	struct cam_subdev *csd = NULL;
 
 	list_for_each_entry(sd, &g_dev.v4l2_dev->subdevs, list) {
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+		CAM_INFO(CAM_CRM, "subdev_type:%d sd:%p E",subdev_type, sd);
+#endif
 		if (sd->entity.function == subdev_type) {
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+			CAM_INFO(CAM_CRM, "subdev_type:%d sd:%p",subdev_type, sd);
+#endif
 			csd = container_of(sd, struct cam_subdev, sd);
 			if (csd->msg_cb != NULL)
 				csd->msg_cb(sd, message_type, data);
 		}
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+		CAM_INFO(CAM_CRM, "subdev_type:%d sd:%p X",subdev_type, sd);
+#endif
 	}
 }
 EXPORT_SYMBOL(cam_subdev_notify_message);
@@ -975,6 +1002,9 @@ int cam_register_subdev(struct cam_subdev *csd)
 	sd->entity.pads = NULL;
 	sd->entity.function = csd->ent_function;
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	CAM_INFO(CAM_CRM, "sd:%p sd->name:%s sd->entity.function:%d", sd, sd->name, sd->entity.function);
+#endif
 	list_add(&csd->list, &cam_req_mgr_ordered_sd_list);
 	list_sort(NULL, &cam_req_mgr_ordered_sd_list,
 		cam_req_mgr_ordered_list_cmp);
@@ -1013,6 +1043,9 @@ int cam_unregister_subdev(struct cam_subdev *csd)
 	}
 
 	mutex_lock(&g_dev.dev_lock);
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	CAM_ERR(CAM_CRM, "csd->sd:%p", &csd->sd);
+#endif
 	v4l2_device_unregister_subdev(&csd->sd);
 	g_dev.count--;
 	mutex_unlock(&g_dev.dev_lock);
@@ -1290,12 +1323,20 @@ struct platform_driver cam_req_mgr_driver = {
 
 int cam_req_mgr_init(void)
 {
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	//add for creat kevent fb proc
+	cam_event_proc_init();
+#endif
 	return platform_driver_register(&cam_req_mgr_driver);
 }
 EXPORT_SYMBOL(cam_req_mgr_init);
 
 void cam_req_mgr_exit(void)
 {
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	//add for creat kevent fb proc
+	cam_event_proc_exit();
+#endif
 	platform_driver_unregister(&cam_req_mgr_driver);
 }
 

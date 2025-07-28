@@ -51,7 +51,9 @@
 #define ICP_WORKQ_TASK_MSG_TYPE 2
 
 #define ICP_DEVICE_IDLE_TIMEOUT 400
-
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+#include <cam_kevent_fb_custom.h>
+#endif
 /*
  * If synx fencing is enabled, send FW memory mapping
  * for synx hw_mutex, ipc hw_mutex, synx global mem
@@ -793,9 +795,14 @@ static int32_t cam_icp_ctx_timer(void *priv, void *data)
 	}
 
 	mutex_lock(&hw_mgr->ctx_mutex[ctx_id]);
+
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
 	if ((!test_bit(ctx_id, hw_mgr->active_ctx_info.active_ctx_bitmap)) ||
 		(ctx_info->ctx_acquired_timestamp !=
 			hw_mgr->ctx_acquired_timestamp[ctx_id])) {
+#else
+	if (!test_bit(ctx_id, hw_mgr->active_ctx_info.active_ctx_bitmap)) {
+#endif
 		CAM_WARN(CAM_ICP, "ctx data is released before accessing it, ctx_id: %u",
 			ctx_id);
 		goto end;
@@ -851,8 +858,9 @@ static void cam_icp_ctx_timer_cb(struct timer_list *timer_data)
 
 	ctx_info->ctx_data = ctx_data;
 	ctx_info->ctx_id = ctx_data->ctx_id;
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
 	ctx_info->ctx_acquired_timestamp = hw_mgr->ctx_acquired_timestamp[ctx_data->ctx_id];
-
+#endif
 	spin_lock_irqsave(&hw_mgr->hw_mgr_lock, flags);
 	task = cam_req_mgr_workq_get_task(hw_mgr->timer_work);
 	if (!task) {
@@ -3275,6 +3283,7 @@ static int cam_icp_mgr_trigger_recovery(struct cam_icp_hw_mgr *hw_mgr)
 		found_active = true;
 		break;
 	}
+
 	if (!found_active)
 		CAM_ERR(CAM_ICP,
 			"[%s] Fail to report system failure to userspace due to no active ctx",
@@ -3289,13 +3298,13 @@ static int cam_icp_mgr_trigger_recovery(struct cam_icp_hw_mgr *hw_mgr)
 		rc = cam_icp_mgr_restart_icp(hw_mgr);
 		if (!rc)
 			atomic_set(&hw_mgr->recovery, 0);
-
 		CAM_DBG(CAM_ICP, "[%s] recovery success: %s",
 			hw_mgr->hw_mgr_name,
 			CAM_BOOL_TO_YESNO(!atomic_read(&hw_mgr->recovery)));
 	}
 
 	mutex_unlock(&hw_mgr->hw_mgr_mutex);
+
 	return rc;
 }
 
@@ -3364,6 +3373,7 @@ static void cam_icp_mgr_process_dbg_buf(struct cam_icp_hw_mgr *hw_mgr)
 		while (remain_len) {
 			pkt_ptr = msg_ptr;
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
 			if (remain_len >= (ICP_DBG_BUF_SIZE_IN_WORDS << BYTE_WORD_SHIFT) ||
 				(pkt_ptr >= hw_mgr->dbg_buf + ICP_DBG_BUF_SIZE_IN_WORDS) ||
 				(pkt_ptr[ICP_PACKET_TYPE] != HFI_MSG_SYS_DEBUG)) {
@@ -3374,7 +3384,7 @@ static void cam_icp_mgr_process_dbg_buf(struct cam_icp_hw_mgr *hw_mgr)
 					read_in_words);
 				return;
 			}
-
+#endif
 			if (remain_len < pkt_ptr[ICP_PACKET_SIZE]) {
 				/*
 				 * MSG is broken into two parts, need to read from dbg q again
@@ -4318,8 +4328,9 @@ add_ctx_data:
 	}
 	list_add_tail(&ctx_data->list, next_list_head);
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
 	hw_mgr->ctx_acquired_timestamp[i] = ktime_get_boottime_ns();
-
+#endif
 	set_bit(i, hw_mgr->active_ctx_info.active_ctx_bitmap);
 	return 0;
 }
@@ -5124,8 +5135,9 @@ static int cam_icp_mgr_release_ctx(
 
 	CAM_DBG(CAM_ICP, "[%s] X: ctx_id = %d", hw_mgr->hw_mgr_name, ctx_data->ctx_id);
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
 	hw_mgr->ctx_acquired_timestamp[ctx_id] = 0;
-
+#endif
 	/* Free ctx data in the queue */
 	cam_icp_mgr_put_ctx(hw_mgr, ctx_data);
 	mutex_unlock(&hw_mgr->ctx_mutex[ctx_id]);
@@ -5930,6 +5942,7 @@ static int cam_icp_mgr_restart_icp(struct cam_icp_hw_mgr *hw_mgr)
 			goto end;
 	} else {
 		rc = cam_icp_allocate_hfi_mem(hw_mgr);
+
 		if (rc) {
 			CAM_ERR(CAM_ICP, "[%s] Failed in alloc hfi mem, rc %d",
 					hw_mgr->hw_mgr_name, rc);
@@ -6023,6 +6036,9 @@ static int cam_icp_mgr_send_config_io(struct cam_icp_hw_ctx_data *ctx_data,
 	struct crm_workq_task *task;
 	uint32_t size_in_words;
 	struct cam_icp_hw_ctx_info *ctx_info;
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	char fb_payload[PAYLOAD_LENGTH] = {0};
+#endif
 
 	task = cam_req_mgr_workq_get_task(hw_mgr->cmd_work);
 	if (!task) {
@@ -6090,6 +6106,9 @@ static int cam_icp_mgr_send_config_io(struct cam_icp_hw_ctx_data *ctx_data,
 			"%s: FW response timeout for send IO cfg handle command on",
 			ctx_data->ctx_id_string);
 	if (!rem_jiffies) {
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+		KEVENT_FB_FRAME_ERROR(fb_payload, "FW response timeout",ctx_data->ctx_id);
+#endif
 		/* send specific error for io config failure */
 		rc = -EREMOTEIO;
 		cam_icp_dump_debug_info(hw_mgr, false);

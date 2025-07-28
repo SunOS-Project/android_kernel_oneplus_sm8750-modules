@@ -364,6 +364,9 @@ struct cam_hw_soc_info {
 
 	void                           *soc_private;
 	uint32_t                        hw_id;
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	uint32_t                        i2c_freq_mode;
+#endif
 #ifdef CONFIG_SPECTRA_VMRM
 	uint32_t                        num_vmrm_resource_ids;
 	uint32_t                        vmrm_resource_ids[CAM_VMRM_MAX_RESOURCE_IDS];

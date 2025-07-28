@@ -408,6 +408,12 @@ int cam_eeprom_parse_dt(struct cam_eeprom_ctrl_t *e_ctrl)
 			soc_info->rgltr_name[i]);
 	}
 	cam_sensor_utils_parse_pm_ctrl_flag(of_node, &(e_ctrl->io_master_info));
-
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	if (of_property_read_bool(of_node, "insensor-page-eeprom-support")) {
+		CAM_INFO(CAM_UTIL, "insensor-page-eeprom is Supported");
+		rc = of_property_read_string(of_node, "oplus-eeprom-name",
+			&soc_private->eeprom_name);
+	}
+#endif
 	return rc;
 }

@@ -114,6 +114,9 @@ driver_includes = [
     "drivers/cam_utils",
     "drivers/cam_vmrm",
     "drivers/cam_vmrm/qrtr",
+    "drivers/oplus/cam_sensor_module/cam_module_utils",
+    "drivers/oplus/cam_sensor_module/cam_link",
+
 ]
 
 ddk_headers(

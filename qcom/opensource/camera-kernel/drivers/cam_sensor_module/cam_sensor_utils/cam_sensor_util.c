@@ -162,6 +162,9 @@ int32_t cam_sensor_util_get_current_qtimer_ns(uint64_t *qtime_ns)
 
 	return rc;
 }
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+EXPORT_SYMBOL(cam_sensor_util_get_current_qtimer_ns);
+#endif
 
 int32_t delete_request(struct i2c_settings_array *i2c_array)
 {
@@ -184,6 +187,9 @@ int32_t delete_request(struct i2c_settings_array *i2c_array)
 
 	return rc;
 }
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+EXPORT_SYMBOL(delete_request);
+#endif
 
 int32_t cam_sensor_handle_delay(
 	uint32_t **cmd_buf,
@@ -460,6 +466,9 @@ int32_t cam_sensor_util_write_qtimer_to_io_buffer(
 
 	return rc;
 }
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+EXPORT_SYMBOL(cam_sensor_util_write_qtimer_to_io_buffer);
+#endif
 
 int32_t cam_sensor_handle_random_read(
 	struct cam_cmd_i2c_random_rd *cmd_i2c_random_rd,
@@ -1280,6 +1289,9 @@ int32_t msm_camera_fill_vreg_params(
 
 	return rc;
 }
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+EXPORT_SYMBOL(msm_camera_fill_vreg_params);
+#endif
 
 int cam_sensor_util_request_gpio_table(
 		struct cam_hw_soc_info *soc_info, int gpio_en)
@@ -2329,6 +2341,44 @@ int cam_sensor_core_power_up(struct cam_sensor_power_ctrl_t *ctrl,
 					seq_min_volt = soc_info->rgltr_min_volt[vreg_idx];
 					seq_max_volt = soc_info->rgltr_max_volt[vreg_idx];
 				}
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+				if(power_setting->seq_type == SENSOR_VIO && power_setting->config_val == 3){
+					CAM_DBG(CAM_SENSOR, "seq_type:%d rgltr_delay = %d",power_setting->seq_type, soc_info->rgltr_delay[vreg_idx]);
+					for(i = 0 ; i < 2 ; i++) {
+						rc =  cam_soc_util_regulator_enable(
+								soc_info->rgltr[vreg_idx],
+								soc_info->rgltr_name[vreg_idx],
+								soc_info->rgltr_min_volt[vreg_idx],
+								soc_info->rgltr_max_volt[vreg_idx],
+								soc_info->rgltr_op_mode[vreg_idx],
+								soc_info->rgltr_delay[vreg_idx]);
+						if (rc) {
+								CAM_ERR(CAM_SENSOR,
+									"Reg Enable failed for %s",
+									soc_info->rgltr_name[vreg_idx]);
+									goto power_up_failed;
+						}
+						usleep_range(power_setting->delay * 500,
+										(power_setting->delay * 500) + 100);
+
+						rc = cam_soc_util_regulator_disable(
+								soc_info->rgltr[vreg_idx],
+								soc_info->rgltr_name[vreg_idx],
+								soc_info->rgltr_min_volt[vreg_idx],
+								soc_info->rgltr_max_volt[vreg_idx],
+								soc_info->rgltr_op_mode[vreg_idx],
+								soc_info->rgltr_delay[vreg_idx]);
+						if (ret) {
+								CAM_ERR(CAM_SENSOR,
+									"Reg: %s disable failed",
+									soc_info->rgltr_name[vreg_idx]);
+									goto power_up_failed;
+						}
+						usleep_range(power_setting->delay * 500,
+										(power_setting->delay * 500) + 100);
+					}
+				}
+#endif
 
 				rc =  cam_soc_util_regulator_enable(
 					soc_info->rgltr[vreg_idx],
@@ -2496,6 +2546,9 @@ power_up_failed:
 
 	return -EINVAL;
 }
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+EXPORT_SYMBOL(cam_sensor_core_power_up);
+#endif
 
 static struct cam_sensor_power_setting*
 msm_camera_get_power_settings(struct cam_sensor_power_ctrl_t *ctrl,
@@ -2550,6 +2603,10 @@ int cam_sensor_util_power_down(struct cam_sensor_power_ctrl_t *ctrl,
 			ctrl->power_setting_size);
 		return -EINVAL;
 	}
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	if(ctrl->power_down_setting_size <= 0)
+		CAM_ERR(CAM_SENSOR_UTIL,"power_down_setting_size:%d",ctrl->power_down_setting_size);
+#endif
 
 	for (index = 0; index < ctrl->power_down_setting_size; index++) {
 		CAM_DBG(CAM_SENSOR_UTIL, "power_down_index %d",  index);
@@ -2682,6 +2739,9 @@ int cam_sensor_util_power_down(struct cam_sensor_power_ctrl_t *ctrl,
 
 	return 0;
 }
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+EXPORT_SYMBOL(cam_sensor_util_power_down);
+#endif
 
 void cam_sensor_utils_parse_pm_ctrl_flag(struct device_node *of_node,
 	struct camera_io_master *io_master_info)

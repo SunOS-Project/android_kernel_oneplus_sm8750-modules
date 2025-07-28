@@ -28,7 +28,7 @@
 #define FORCE_ENABLE_RECOVERY   1
 #define AUTO_RECOVERY           0
 
-#define CRM_WORKQ_NUM_TASKS 60
+#define CRM_WORKQ_NUM_TASKS 120
 
 #define MAX_SYNC_COUNT 65535
 
@@ -49,8 +49,11 @@
 #define VERSION_1  1
 #define VERSION_2  2
 #define CAM_REQ_MGR_MAX_TRIGGERS   2
-
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+#define REQ_MAXIMUM_BUBBLE_TIMES   30
+#else
 #define REQ_MAXIMUM_BUBBLE_TIMES   2
+#endif
 
 #define CAM_REQ_MGR_HALF_FRAME_DURATION(frame_duration) ((frame_duration) / 2)
 #define CAM_REQ_MGR_COMPUTE_TIMEOUT(x) ((x) + (((x) * (x + 25)) / 100))
@@ -534,6 +537,9 @@ struct cam_req_mgr_core_link {
 	uint32_t                             retry_cnt;
 	bool                                 is_shutdown;
 	uint64_t                             sof_timestamp;
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	uint64_t                             shift_timestamp;
+#endif
 	uint64_t                             prev_sof_timestamp;
 	bool                                 dual_trigger;
 	uint32_t trigger_cnt[CAM_REQ_MGR_MAX_TRIGGERS]

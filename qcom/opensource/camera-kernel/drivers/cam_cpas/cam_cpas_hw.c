@@ -426,7 +426,7 @@ static int cam_cpas_util_vote_hlos_bus_client_bw(
 		cam_cpas_process_bw_overrides(bus_client, &curr_vote->hlos_vote.ab,
 			&curr_vote->hlos_vote.ib, &cam_debug->cpas_settings);
 
-	CAM_DBG(CAM_CPAS, "Bus_client: %s, HLOS vote [%llu %llu] is_camnoc_bw: %s",
+	CAM_INFO(CAM_CPAS, "Bus_client: %s, HLOS vote [%llu %llu] is_camnoc_bw: %s",
 		bus_client->common_data.name,
 		curr_vote->hlos_vote.ab, curr_vote->hlos_vote.ib, CAM_BOOL_TO_YESNO(is_camnoc_bw));
 
@@ -2398,7 +2398,7 @@ static int cam_cpas_util_apply_default_axi_vote(
 		else
 			mnoc_ib_bw = 0;
 
-		CAM_DBG(CAM_CPAS, "Port=[%s] :ab[%llu] ib[%llu]",
+		CAM_INFO(CAM_CPAS, "Port=[%s] :ab[%llu] ib[%llu]",
 			axi_port->axi_port_name, mnoc_ab_bw, mnoc_ib_bw);
 
 		axi_port->curr_bw.hlos_vote.ab = mnoc_ab_bw;
@@ -2826,7 +2826,7 @@ static int cam_cpas_hw_start(void *hw_priv, void *start_args,
 		goto error;
 	}
 
-	CAM_DBG(CAM_CPAS,
+	CAM_INFO(CAM_CPAS,
 		"AHB :client=[%d][%s][%d] type[%d], level[%d], applied[%d]",
 		client_indx, cpas_client->data.identifier,
 		cpas_client->data.cell_index,
@@ -2925,7 +2925,7 @@ static int cam_cpas_hw_start(void *hw_priv, void *start_args,
 				goto remove_ahb_vote;
 			}
 		}
-		CAM_DBG(CAM_CPAS, "soc_access_count=%d\n",
+		CAM_INFO(CAM_CPAS, "soc_access_count=%d\n",
 			atomic_read(&cpas_core->soc_access_count));
 
 		if (soc_private->enable_smart_qos)
@@ -2952,7 +2952,7 @@ static int cam_cpas_hw_start(void *hw_priv, void *start_args,
 		cam_cpas_dump_full_tree_state(cpas_hw, "StartFirstClient");
 	}
 
-	CAM_DBG(CAM_CPAS, "client=[%d][%s][%d] streamon_clients=%d",
+	CAM_INFO(CAM_CPAS, "client=[%d][%s][%d] streamon_clients=%d",
 		client_indx, cpas_client->data.identifier,
 		cpas_client->data.cell_index, cpas_core->streamon_clients);
 
@@ -3061,7 +3061,7 @@ static int cam_cpas_hw_stop(void *hw_priv, void *stop_args,
 	mutex_lock(&cpas_core->client_mutex[client_indx]);
 	cpas_client = cpas_core->cpas_client[client_indx];
 
-	CAM_DBG(CAM_CPAS, "Client=[%d][%s][%d] streamon_clients=%d",
+	CAM_INFO(CAM_CPAS, "Client=[%d][%s][%d] streamon_clients=%d",
 		client_indx, cpas_client->data.identifier,
 		cpas_client->data.cell_index, cpas_core->streamon_clients);
 
@@ -3154,7 +3154,7 @@ static int cam_cpas_hw_stop(void *hw_priv, void *stop_args,
 			CAM_ERR(CAM_CPAS, "disable_resorce failed, rc=%d", rc);
 			goto done;
 		}
-		CAM_DBG(CAM_CPAS, "Disabled all the resources: soc_access_count=%d",
+		CAM_INFO(CAM_CPAS, "Disabled all the resources: soc_access_count=%d",
 			atomic_read(&cpas_core->soc_access_count));
 
 		count = cam_soc_util_regulators_enabled(&cpas_hw->soc_info);
@@ -3172,7 +3172,7 @@ static int cam_cpas_hw_stop(void *hw_priv, void *stop_args,
 		if (rc)
 			CAM_ERR(CAM_CPAS, "Invalid applied bw at stop rc: %d", rc);
 
-		CAM_DBG(CAM_CPAS, "hlos axi floor lvl: %d, hlos axi clk lvl: %d",
+		CAM_INFO(CAM_CPAS, "hlos axi floor lvl: %d, hlos axi clk lvl: %d",
 			cpas_core->hlos_axi_floor_lvl, cpas_core->hlos_axi_bw_calc_lvl);
 
 		cpas_hw->hw_state = CAM_HW_STATE_POWER_DOWN;

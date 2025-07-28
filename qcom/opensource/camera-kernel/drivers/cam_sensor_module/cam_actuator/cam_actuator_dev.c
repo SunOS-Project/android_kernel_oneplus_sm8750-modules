@@ -62,6 +62,10 @@ static long cam_actuator_subdev_ioctl(struct v4l2_subdev *sd,
 	struct cam_actuator_ctrl_t *a_ctrl =
 		v4l2_get_subdevdata(sd);
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	mutex_lock(&(a_ctrl->actuator_ioctl_mutex));
+#endif
+
 	switch (cmd) {
 	case VIDIOC_CAM_CONTROL:
 		rc = cam_actuator_driver_cmd(a_ctrl, arg);
@@ -78,6 +82,9 @@ static long cam_actuator_subdev_ioctl(struct v4l2_subdev *sd,
 	case CAM_SD_SHUTDOWN:
 		if (!cam_req_mgr_is_shutdown()) {
 			CAM_ERR(CAM_CORE, "SD shouldn't come from user space");
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+			mutex_unlock(&(a_ctrl->actuator_ioctl_mutex));
+#endif
 			return 0;
 		}
 
@@ -88,6 +95,9 @@ static long cam_actuator_subdev_ioctl(struct v4l2_subdev *sd,
 		rc = -ENOIOCTLCMD;
 		break;
 	}
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	mutex_unlock(&(a_ctrl->actuator_ioctl_mutex));
+#endif
 	return rc;
 }
 
@@ -136,21 +146,38 @@ static long cam_actuator_init_subdev_do_ioctl(struct v4l2_subdev *sd,
 }
 #endif
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+struct v4l2_subdev_core_ops cam_actuator_subdev_core_ops = {
+#else
 static struct v4l2_subdev_core_ops cam_actuator_subdev_core_ops = {
+#endif
 	.ioctl = cam_actuator_subdev_ioctl,
 #ifdef CONFIG_COMPAT
 	.compat_ioctl32 = cam_actuator_init_subdev_do_ioctl,
 #endif
 };
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+EXPORT_SYMBOL(cam_actuator_subdev_core_ops);
+#endif
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
 static struct v4l2_subdev_ops cam_actuator_subdev_ops = {
+#else
+static const struct v4l2_subdev_ops cam_actuator_subdev_ops = {
+#endif
 	.core = &cam_actuator_subdev_core_ops,
 };
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+struct v4l2_subdev_internal_ops cam_actuator_internal_ops = {
+#else
 static const struct v4l2_subdev_internal_ops cam_actuator_internal_ops = {
+#endif
 	.close = cam_actuator_subdev_close,
 };
-
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+EXPORT_SYMBOL(cam_actuator_internal_ops);
+#endif
 static int cam_actuator_init_subdev(struct cam_actuator_ctrl_t *a_ctrl)
 {
 	int rc = 0;

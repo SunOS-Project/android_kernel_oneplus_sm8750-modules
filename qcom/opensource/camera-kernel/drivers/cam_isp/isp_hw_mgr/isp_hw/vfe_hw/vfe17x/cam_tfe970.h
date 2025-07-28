@@ -693,7 +693,7 @@ static struct cam_vfe_top_ver4_hw_info tfe970_top_hw_info = {
 	.wr_client_desc         = tfe970_wr_client_desc,
 	.ipp_module_desc        = tfe970_ipp_mod_desc,
 	.bayer_module_desc      = tfe970_bayer_mod_desc,
-	.num_mux = 6,
+	.num_mux = 7,
 	.mux_type = {
 		CAM_VFE_CAMIF_VER_4_0,
 		CAM_VFE_RDI_VER_1_0,

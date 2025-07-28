@@ -26,6 +26,9 @@ int32_t cam_actuator_parse_dt(struct cam_actuator_ctrl_t *a_ctrl,
 
 	/* Initialize mutex */
 	mutex_init(&(a_ctrl->actuator_mutex));
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	mutex_init(&(a_ctrl->actuator_ioctl_mutex));
+#endif
 
 	rc = cam_soc_util_get_dt_properties(soc_info);
 	if (rc < 0) {
@@ -64,6 +67,19 @@ int32_t cam_actuator_parse_dt(struct cam_actuator_ctrl_t *a_ctrl,
 		a_ctrl->io_master_info.cci_client->cci_device = a_ctrl->cci_num;
 		CAM_DBG(CAM_ACTUATOR, "cci-device %d", a_ctrl->cci_num);
 	}
+
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	rc = of_property_read_u32(of_node, "is_af_ignore_init_error", &a_ctrl->is_af_ignore_init_error);
+	if (rc)
+	{
+		a_ctrl->is_af_ignore_init_error = 0;
+		CAM_INFO(CAM_ACTUATOR, "get failed for is_af_ignore_init_error = %d",a_ctrl->is_af_ignore_init_error);
+	}
+	else
+	{
+		CAM_INFO(CAM_ACTUATOR, "read is_af_ignore_init_error success, value:%d", a_ctrl->is_af_ignore_init_error);
+	}
+#endif
 
 	/* Initialize regulators to default parameters */
 	for (i = 0; i < soc_info->num_rgltr; i++) {

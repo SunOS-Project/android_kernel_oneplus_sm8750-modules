@@ -99,7 +99,17 @@ int32_t cam_eeprom_update_i2c_info(struct cam_eeprom_ctrl_t *e_ctrl,
 		cci_client->sid = (i2c_info->slave_addr) >> 1;
 		cci_client->retries = 3;
 		cci_client->id_map = 0;
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+		if(e_ctrl->soc_info.i2c_freq_mode != 0xFF){
+			cci_client->i2c_freq_mode = e_ctrl->soc_info.i2c_freq_mode;
+			CAM_INFO(CAM_EEPROM, "iic-freq-mode override as %d ",cci_client->i2c_freq_mode);
+		}
+		else{
+			cci_client->i2c_freq_mode = i2c_info->i2c_freq_mode;
+		}
+#else
 		cci_client->i2c_freq_mode = i2c_info->i2c_freq_mode;
+#endif
 	} else if (e_ctrl->io_master_info.master_type == I2C_MASTER) {
 		if (!e_ctrl->io_master_info.qup_client) {
 			CAM_ERR(CAM_EEPROM, "failed: qup_client %pK",
@@ -163,12 +173,19 @@ static const struct v4l2_subdev_internal_ops cam_eeprom_internal_ops = {
 	.close = cam_eeprom_subdev_close,
 };
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+struct v4l2_subdev_core_ops cam_eeprom_subdev_core_ops = {
+#else
 static struct v4l2_subdev_core_ops cam_eeprom_subdev_core_ops = {
+#endif
 	.ioctl = cam_eeprom_subdev_ioctl,
 #ifdef CONFIG_COMPAT
 	.compat_ioctl32 = cam_eeprom_init_subdev_do_ioctl,
 #endif
 };
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+EXPORT_SYMBOL(cam_eeprom_subdev_core_ops);
+#endif
 
 static struct v4l2_subdev_ops cam_eeprom_subdev_ops = {
 	.core = &cam_eeprom_subdev_core_ops,

@@ -509,10 +509,17 @@ static void cam_vfe_top_ver4_check_module_status(
 			cam_vfe_top_ver4_check_module_idle(&(*status_list)[i][j], top_priv,
 				&idle_status, &is_mc);
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
 			snprintf(line_buf, CAM_VFE_LEN_LOG_BUF,
 				"\n\t%s [I:%llu V:%llu R:%llu] idle: 0x%x, is_mc: %s",
 				(*status_list)[i][j].clc_name, ((val >> 2) & 1),
 				((val >> 1) & 1), (val & 1), idle_status, CAM_BOOL_TO_YESNO(is_mc));
+#else
+			snprintf(line_buf, CAM_VFE_LEN_LOG_BUF,
+				"\n\t%s [I:%llu V:%llu R:%llu] idle: 0x%x, is_mc: %s",
+				(*status_list)[i][j].clc_name, ((val >> 2) & 1),
+				((val >> 1) & 1), (val & 1), idle_status, CAM_BOOL_TO_YESNO(is_mc));
+#endif
 
 			strlcat(log_buf, line_buf, 1024);
 			found = true;
@@ -1988,6 +1995,8 @@ static int cam_vfe_handle_irq_top_half(uint32_t evt_id,
 
 	vfe_res = th_payload->handler_priv;
 	vfe_priv = vfe_res->res_priv;
+
+	CAM_DBG(CAM_ISP, "[QC DBG]: irq_top_half enter, num_registers %d", th_payload->num_registers);
 
 	for (i = 0; i < th_payload->num_registers; i++)
 		CAM_DBG(CAM_ISP,

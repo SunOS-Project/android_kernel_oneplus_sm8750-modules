@@ -22,6 +22,10 @@ struct completion *cam_ois_get_i3c_completion(uint32_t index)
 {
 	return &g_i3c_ois_data[index].probe_complete;
 }
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+EXPORT_SYMBOL(cam_ois_get_i3c_completion);
+#endif
+
 
 static int cam_ois_subdev_close_internal(struct v4l2_subdev *sd,
 	struct v4l2_subdev_fh *fh)
@@ -99,7 +103,18 @@ static int32_t cam_ois_update_i2c_info(struct cam_ois_ctrl_t *o_ctrl,
 		cci_client->sid = (i2c_info->slave_addr) >> 1;
 		cci_client->retries = 3;
 		cci_client->id_map = 0;
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+		if(o_ctrl->soc_info.i2c_freq_mode != 0xFF){
+			cci_client->i2c_freq_mode = o_ctrl->soc_info.i2c_freq_mode;
+			CAM_INFO(CAM_OIS, "iic-freq-mode override as %d ",cci_client->i2c_freq_mode);
+		}
+		else{
+			CAM_INFO(CAM_OIS, "iic-freq-mode not found ");
+			cci_client->i2c_freq_mode = i2c_info->i2c_freq_mode;
+		}
+#else
 		cci_client->i2c_freq_mode = i2c_info->i2c_freq_mode;
+#endif
 	}
 
 	return 0;
@@ -149,16 +164,30 @@ static long cam_ois_init_subdev_do_ioctl(struct v4l2_subdev *sd,
 }
 #endif
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+struct v4l2_subdev_internal_ops cam_ois_internal_ops = {
+#else
 static const struct v4l2_subdev_internal_ops cam_ois_internal_ops = {
+#endif
 	.close = cam_ois_subdev_close,
 };
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+EXPORT_SYMBOL(cam_ois_internal_ops);
+#endif
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+struct v4l2_subdev_core_ops cam_ois_subdev_core_ops = {
+#else
 static struct v4l2_subdev_core_ops cam_ois_subdev_core_ops = {
+#endif
 	.ioctl = cam_ois_subdev_ioctl,
 #ifdef CONFIG_COMPAT
 	.compat_ioctl32 = cam_ois_init_subdev_do_ioctl,
 #endif
 };
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+EXPORT_SYMBOL(cam_ois_subdev_core_ops);
+#endif
 
 static struct v4l2_subdev_ops cam_ois_subdev_ops = {
 	.core = &cam_ois_subdev_core_ops,

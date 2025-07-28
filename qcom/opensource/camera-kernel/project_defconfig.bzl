@@ -8,6 +8,7 @@ common_configs = [
 	"CONFIG_SPECTRA_USE_CLK_CRM_API=y",
 	"CONFIG_SPECTRA_USE_RPMH_DRV_API=y",
 	"CONFIG_SPECTRA_LLCC_STALING=y",
+	"CONFIG_SPECTRA_OPLUS=y",
 ]
 
 dependency_config = [
@@ -21,7 +22,10 @@ dependency_config = [
 
 project_configs = select({
     # Project-specific configs
-    ":no_project": [],
+    ":no_project": dependency_config + [
+        "CONFIG_SPECTRA_SECURE_DYN_PORT_CFG=y",
+        "CONFIG_SPECTRA_SECURE_CAMNOC_REG_UPDATE=y",
+    ],
     ":pineapple": dependency_config + [
         "CONFIG_SPECTRA_SECURE_CAMNOC_REG_UPDATE=y",
     ],
