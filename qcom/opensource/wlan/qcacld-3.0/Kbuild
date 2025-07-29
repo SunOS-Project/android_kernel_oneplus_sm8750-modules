@@ -151,6 +151,10 @@ HDD_OBJS := 	$(HDD_SRC_DIR)/wlan_hdd_assoc.o \
 		$(HDD_SRC_DIR)/wlan_hdd_wowl.o\
 		$(HDD_SRC_DIR)/wlan_hdd_ll_lt_sap.o\
 
+#ifdef OPLUS_BUG_STABILITY
+KBUILD_CPPFLAGS += -DOPLUS_BUG_STABILITY
+#endif /* OPLUS_BUG_STABILITY */
+
 ifeq ($(CONFIG_UNIT_TEST), y)
 HDD_OBJS += $(HDD_SRC_DIR)/wlan_hdd_unit_test.o
 endif

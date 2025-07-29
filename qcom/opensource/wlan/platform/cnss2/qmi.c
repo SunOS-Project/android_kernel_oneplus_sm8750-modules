@@ -14,6 +14,13 @@
 #include "qmi.h"
 #include "genl.h"
 
+#ifdef OPLUS_FEATURE_WIFI_BDF
+//Modify for: multi projects using different bdf
+#include <soc/oplus/system/oplus_project.h>
+//Add for: select BDF by device-tree , bug id 7902090
+#include "oplus_wifi.h"
+#endif /* OPLUS_FEATURE_WIFI_BDF */
+
 #define WLFW_SERVICE_INS_ID_V01		1
 #define WLFW_CLIENT_ID			0x4b4e454c
 #define BDF_FILE_NAME_PREFIX		"bdwlan"
@@ -28,6 +35,39 @@
 #define REGDB_FILE_NAME			"regdb.bin"
 #define HDS_FILE_NAME			"hds.bin"
 #define CHIP_ID_GF_MASK			0x10
+
+#ifdef OPLUS_FEATURE_WIFI_BDF
+//Modify for: multi projects using different bdf
+#define BDF_FILE_IN		"bdwlan.b0i"
+#define BDF_FILE_EU		"bdwlan.b0e"
+#define BDF_FILE_US		"bdwlan.b0a"
+#define BDF_FILE_IN_GF		"bdwlang.b0i"
+#define BDF_FILE_EU_GF		"bdwlang.b0e"
+#define BDF_FILE_US_GF		"bdwlang.b0a"
+
+#define REG_ID_CN		1
+#define REG_ID_IN		2
+#define REG_ID_EU_US	3
+
+#define REGION_CODE_CN      "10010111"
+#define REGION_CODE_IN      "00011011"
+#define REGION_CODE_EU      "01000100"
+#define REGION_CODE_US      "10100001"
+#define REGION_CODE_ROW     "10100001"
+
+#define NV_ID_US        0xA1
+#define NV_ID_IN        0x1B
+#define NV_ID_EU        0x44
+#define NV_ID_CN        0x97
+
+
+#define REGION_CODE_US_NAME        "US"
+#define REGION_CODE_IN_NAME        "IN"
+#define REGION_CODE_EU_NAME        "EU"
+#define REGION_CODE_CN_NAME        "CN"
+
+#define ES1_CHIP_ID_MASK    0x1
+#endif /* OPLUS_FEATURE_WIFI_BDF */
 
 #define QDSS_TRACE_CONFIG_FILE		"qdss_trace_config"
 /*
@@ -794,6 +834,116 @@ out:
 	return ret;
 }
 
+#ifdef OPLUS_FEATURE_WIFI_BDF
+static int get_regionid_from_cmdline(void)
+{
+	struct device_node *np;
+	const char *bootparams = NULL;
+	char *str;
+	int temp_region = 0;
+	int ret = 0;
+	int region_id = -1;
+
+	np = of_find_node_by_path("/chosen");
+	if (np) {
+		ret = of_property_read_string(np, "bootargs", &bootparams);
+		if (!bootparams || ret < 0) {
+			cnss_pr_dbg("failed to get bootargs property\n");
+			return region_id;
+		}
+
+		str = strstr(bootparams, "oplus_region=");
+		if (str) {
+			str += strlen("oplus_region=");
+			ret = get_option(&str, &temp_region);
+			if (ret == 1)
+				region_id = temp_region & 0xFF;
+			cnss_pr_dbg("oplus_region=0x%02x\n", region_id);
+		}
+	}
+	return region_id;
+}
+
+
+//Modify for: multi projects using different bdf
+static bool is_prj_support_region_id(void) {
+	int project_id = get_project();
+	cnss_pr_dbg("the project support region id is: %d\n", project_id);
+	if (project_id == 23821 ||
+		project_id == 23893) {
+		return true;
+	}
+	return false;
+}
+
+static bool is_prj_support_region_id_24671(void) {
+	int project_id = get_project();
+	cnss_pr_info("the project support region id is: %d\n", project_id);
+	if (project_id == 24671 || project_id == 24670) {
+		return true;
+	}
+	return false;
+}
+
+
+static void cnss_get_oplus_bdf_file_name(struct cnss_plat_data *plat_priv, char* file_name, u32 filename_len) {
+	int reg_id = get_Operator_Version();
+	int nv_id = 0;
+	nv_id = get_regionid_from_cmdline();
+	cnss_pr_info("region id: %d, nvid: 0x%02x, wcn chip_id: 0x%02x\n", reg_id, nv_id, plat_priv->chip_info.chip_id);
+
+	if (plat_priv->chip_info.chip_id & ES1_CHIP_ID_MASK) {
+		if (is_prj_support_region_id()) {
+			if (reg_id == REG_ID_IN) {
+				snprintf(file_name, filename_len, BDF_FILE_IN_GF);
+				plat_priv->region_name = REGION_CODE_IN_NAME;
+			} else if (reg_id == REG_ID_EU_US) {
+				if (nv_id == NV_ID_EU) {
+					plat_priv->region_name = REGION_CODE_EU_NAME;
+					snprintf(file_name, filename_len, BDF_FILE_EU_GF);
+				} else if (nv_id == NV_ID_US) {
+					plat_priv->region_name = REGION_CODE_US_NAME;
+					snprintf(file_name, filename_len, BDF_FILE_US_GF);
+				} else {
+					snprintf(file_name, filename_len, ELF_BDF_FILE_NAME_GF);
+				}
+			} else {
+				snprintf(file_name, filename_len, ELF_BDF_FILE_NAME_GF);
+			}
+		} else {
+			snprintf(file_name, filename_len, ELF_BDF_FILE_NAME_GF);
+		}
+	} else {
+		if (is_prj_support_region_id()) {
+			if (reg_id == REG_ID_IN) {
+				snprintf(file_name, filename_len, BDF_FILE_IN);
+				plat_priv->region_name = REGION_CODE_IN_NAME;
+			} else if (reg_id == REG_ID_EU_US) {
+				if (nv_id == NV_ID_EU) {
+					snprintf(file_name, filename_len, BDF_FILE_EU);
+					plat_priv->region_name = REGION_CODE_EU_NAME;
+				} else if (nv_id == NV_ID_US) {
+					snprintf(file_name, filename_len, BDF_FILE_US);
+					plat_priv->region_name = REGION_CODE_US_NAME;
+				} else {
+					snprintf(file_name, filename_len, ELF_BDF_FILE_NAME);
+				}
+			} else {
+				snprintf(file_name, filename_len, ELF_BDF_FILE_NAME);
+			}
+		} else if(is_prj_support_region_id_24671()) {
+			if (nv_id == NV_ID_IN) {
+				snprintf(file_name, filename_len, BDF_FILE_IN);
+			} else {
+				snprintf(file_name, filename_len, ELF_BDF_FILE_NAME);
+			}
+		} else {
+			snprintf(file_name, filename_len, ELF_BDF_FILE_NAME);
+		}
+	}
+}
+#endif /* OPLUS_FEATURE_WIFI_BDF */
+
 static char *cnss_bdf_type_to_str(enum cnss_bdf_type bdf_type)
 {
 	switch (bdf_type) {
@@ -813,6 +963,10 @@ static int cnss_get_bdf_file_name(struct cnss_plat_data *plat_priv,
 				  u32 bdf_type, char *filename,
 				  u32 filename_len)
 {
+	#ifdef OPLUS_FEATURE_WIFI_BDF
+	//Add for: select BDF by device-tree , bug id 7902090
+	const char *bdf_filename;
+	#endif  /* OPLUS_FEATURE_WIFI_BDF */
 	char filename_tmp[MAX_FIRMWARE_NAME_LEN];
 	int ret = 0;
 
@@ -820,12 +974,24 @@ static int cnss_get_bdf_file_name(struct cnss_plat_data *plat_priv,
 	case CNSS_BDF_ELF:
 		/* Board ID will be equal or less than 0xFF in GF mask case */
 		if (plat_priv->board_info.board_id == 0xFF) {
+#ifndef OPLUS_FEATURE_WIFI_BDF
+//Modify for: multi projects using different bdf
 			if (plat_priv->chip_info.chip_id & CHIP_ID_GF_MASK)
 				snprintf(filename_tmp, filename_len,
 					 ELF_BDF_FILE_NAME_GF);
 			else
 				snprintf(filename_tmp, filename_len,
 					 ELF_BDF_FILE_NAME);
+#else
+			cnss_get_oplus_bdf_file_name(plat_priv, filename_tmp, filename_len);
+			//Add for: select BDF by device-tree , bug id 7902090
+			bdf_filename = get_oplus_wifi_bdf();
+			if (bdf_filename && (strlen(bdf_filename) < MAX_FIRMWARE_NAME_LEN)) {
+				strcpy(filename_tmp, bdf_filename);
+				plat_priv->bdf_name = bdf_filename;
+				plat_priv->region_name = get_oplus_wifi_region();
+			}
+#endif /* OPLUS_FEATURE_WIFI_BDF */
 		} else if (plat_priv->board_info.board_id < 0xFF) {
 			if (plat_priv->chip_info.chip_id & CHIP_ID_GF_MASK)
 				snprintf(filename_tmp, filename_len,

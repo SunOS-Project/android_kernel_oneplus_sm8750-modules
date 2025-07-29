@@ -37,6 +37,11 @@
 #include "genl.h"
 #include "reg.h"
 
+#ifdef OPLUS_FEATURE_WIFI_BDF
+//Add for: select BDF by device-tree , bug id 7902090
+#include "oplus_wifi.h"
+#endif  /* OPLUS_FEATURE_WIFI_BDF */
+
 #ifdef CONFIG_CNSS_HW_SECURE_DISABLE
 #ifdef CONFIG_CNSS_HW_SECURE_SMEM
 #include <linux/soc/qcom/smem.h>
@@ -53,6 +58,11 @@
 #define PERIPHERAL_NOT_FOUND 10
 #endif
 #endif
+
+#ifdef OPLUS_FEATURE_WIFI_MAC
+#include <soc/oplus/system/boot_mode.h>
+#include <soc/oplus/system/oplus_project.h>
+#endif /* OPLUS_FEATURE_WIFI_MAC */
 
 #define CNSS_DUMP_FORMAT_VER		0x11
 #define CNSS_DUMP_FORMAT_VER_V2		0x22
@@ -1244,14 +1254,21 @@ static int cnss_setup_dms_mac(struct cnss_plat_data *plat_priv)
 	/* DTSI property use-nv-mac is used to force DMS MAC address for WLAN.
 	 * Thus assert on failure to get MAC from DMS even after retries
 	 */
+#ifndef OPLUS_FEATURE_WIFI_MAC
+//Add for boot wlan mode not use NV mac
 	if (plat_priv->use_nv_mac) {
+#else
+        if ((get_boot_mode() !=  MSM_BOOT_MODE__WLAN) && plat_priv->use_nv_mac) {
+#endif /* OPLUS_FEATURE_WIFI_MAC */
 		/* Check if Daemon says platform support DMS MAC provisioning */
 		cfg = cnss_plat_ipc_qmi_daemon_config();
 		if (cfg) {
 			if (!cfg->dms_mac_addr_supported) {
 				cnss_pr_err("DMS MAC address not supported\n");
 				CNSS_ASSERT(0);
+#ifndef OPLUS_FEATURE_WIFI_MAC
 				return -EINVAL;
+#endif /* OPLUS_FEATURE_WIFI_MAC */
 			}
 		}
 		for (i = 0; i < CNSS_DMS_QMI_CONNECTION_WAIT_RETRY; i++) {
@@ -7046,6 +7063,11 @@ static int cnss_probe(struct platform_device *plat_dev)
 	INIT_LIST_HEAD(&plat_priv->vreg_list);
 	INIT_LIST_HEAD(&plat_priv->clk_list);
 
+        #ifdef OPLUS_FEATURE_WIFI_BDF
+        //Add for: select BDF by device-tree , bug id 7902090
+        oplus_wifi_init(plat_dev);
+        #endif  /* OPLUS_FEATURE_WIFI_BDF */
+
 	cnss_enable_direct_cx_pmic_pbs(plat_priv);
 	cnss_get_nvmem_cells(plat_priv);
 	cnss_get_pm_domain_info(plat_priv);
@@ -7182,6 +7204,10 @@ static void cnss_remove(struct platform_device *plat_dev)
 	}
 
 	plat_priv->audio_iommu_domain = NULL;
+	#ifdef OPLUS_FEATURE_WIFI_BDF
+	//Add for: select BDF by device-tree , bug id 7902090
+	oplus_wifi_deinit();
+	#endif  /* OPLUS_FEATURE_WIFI_BDF */
 	cnss_genl_exit();
 	cnss_pm_notifier_deinit(plat_priv);
 	cnss_unregister_ims_service(plat_priv);

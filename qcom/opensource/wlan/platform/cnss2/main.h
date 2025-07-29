@@ -728,6 +728,9 @@ struct cnss_plat_data {
 	uint32_t num_shadow_regs_v3;
 	bool sec_peri_feature_disable;
 	struct device_node *dev_node;
+ 	#ifdef OPLUS_FEATURE_WIFI_BDF
+	const char *bdf_name, *region_name;
+	#endif /* OPLUS_FEATURE_WIFI_BDF */
 	char device_name[CNSS_DEVICE_NAME_SIZE];
 	u32 plat_idx;
 	bool enumerate_done;
