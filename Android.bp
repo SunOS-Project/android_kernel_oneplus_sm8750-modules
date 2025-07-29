@@ -1,3 +1,3 @@
 soong_namespace {
-    imports: ["kernel/qcom/sm8750"]
+    imports: ["kernel/oneplus/sm8750"]
 }
