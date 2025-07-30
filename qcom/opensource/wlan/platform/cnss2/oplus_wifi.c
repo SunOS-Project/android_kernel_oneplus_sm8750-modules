@@ -25,6 +25,7 @@
 
 #include "main.h"
 #include "debug.h"
+#include "oplus_wifi.h"
 
 #define OPLUS_WIFI_BDF_NODE "oplus_bdf"
 #define OPLUS_WIFI_BDF_NAME "bdf_name"
@@ -53,7 +54,7 @@ static void oplus_wifi_set_wifi_data(struct wifi_data *wifi_data)
 	plat_env = wifi_data;
 }
 
-struct wifi_data *oplus_wifi_get_wifi_data(void)
+static struct wifi_data *oplus_wifi_get_wifi_data(void)
 {
 	return plat_env;
 }

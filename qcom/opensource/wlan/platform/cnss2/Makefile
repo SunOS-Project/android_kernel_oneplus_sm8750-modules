@@ -28,3 +28,4 @@ cnss2-y += genl.o
 cnss2-$(CONFIG_PCI_MSM) += pci_qcom.o
 cnss2-$(CONFIG_PCIE_QCOM_ECAM) += pci_qcom_ecam.o
 cnss2-$(CONFIG_CNSS2_QMI) += qmi.o coexistence_service_v01.o
+cnss2-y += oplus_wifi.o
