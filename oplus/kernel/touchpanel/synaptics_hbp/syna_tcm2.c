@@ -757,78 +757,6 @@ static void syna_dev_report_input_events(struct syna_tcm *tcm)
 			LOGD("Gesture detected, id:%d\n",
 				touch_data->gesture_id);
 
-			switch (touch_data->gesture_id) {
-			case CIRCLE_DETECT:
-				touch_data->gesture_type = CIRCLE_GESTURE;
-				break;
-
-			case SWIPE_DETECT:
-				if (touch_data->extra_gesture_info[4] == 0x41) { /*x+*/
-					touch_data->gesture_type = LEFT2RIGHT_SWIP;
-				} else if (touch_data->extra_gesture_info[4] == 0x42) { /*x-*/
-					touch_data->gesture_type = RIGHT2LEFT_SWIP;
-				} else if (touch_data->extra_gesture_info[4] == 0x44) { /*y+*/
-					touch_data->gesture_type = UP2DOWN_SWIP;
-				} else if (touch_data->extra_gesture_info[4] == 0x48) { /*y-*/
-					touch_data->gesture_type = DOWN2UP_SWIP;
-				} else if (touch_data->extra_gesture_info[4] == 0x81) { /*2x-*/
-					touch_data->gesture_type = DOU_SWIP;
-				} else if (touch_data->extra_gesture_info[4] == 0x82) { /*2x+*/
-					touch_data->gesture_type = DOU_SWIP;
-				} else if (touch_data->extra_gesture_info[4] == 0x84) { /*2y+*/
-					touch_data->gesture_type = DOU_SWIP;
-				} else if (touch_data->extra_gesture_info[4] == 0x88) { /*2y-*/
-					touch_data->gesture_type = DOU_SWIP;
-				}
-				break;
-
-			case M_UNICODE:
-				touch_data->gesture_type = M_GESTRUE;
-				break;
-
-			case W_UNICODE:
-				touch_data->gesture_type = W_GESTURE;
-				break;
-
-			case VEE_DETECT:
-				if (touch_data->extra_gesture_info[2] == 0x02) { /*up*/
-					touch_data->gesture_type = UP_VEE;
-				} else if (touch_data->extra_gesture_info[2] == 0x01) { /*down*/
-					touch_data->gesture_type = DOWN_VEE;
-				} else if (touch_data->extra_gesture_info[2] == 0x08) { /*left*/
-					touch_data->gesture_type = LEFT_VEE;
-				} else if (touch_data->extra_gesture_info[2] == 0x04) { /*right*/
-					touch_data->gesture_type = RIGHT_VEE;
-				}
-				break;
-
-			case TOUCH_HOLD_DOWN:
-				touch_data->gesture_type = FINGER_PRINTDOWN;
-				break;
-
-			case TOUCH_HOLD_UP:
-				touch_data->gesture_type = FRINGER_PRINTUP;
-				break;
-
-			case HEART_DETECT:
-				touch_data->gesture_type = HEART;
-				break;
-
-			case STAP_DETECT:
-				touch_data->gesture_type = SINGLE_TAP;
-				break;
-
-			case S_UNICODE:
-				touch_data->gesture_type = S_GESTURE;
-				break;
-
-			case TRIANGLE_DETECT:
-			default:
-				TPD_INFO("not support\n");
-				touch_data->gesture_type = UNKOWN_GESTURE;
-				break;
-			}
-
 			if (touch_data->gesture_id == TOUCH_HOLD_DOWN) {
 				if (!tcm->is_fp_down) {
 					memset(&fp_info, 0, sizeof(struct fp_underscreen_info));
@@ -909,15 +837,10 @@ static void syna_dev_report_input_events(struct syna_tcm *tcm)
 					input_sync(input_dev);
 					touchpanel_event_call_notifier(EVENT_ACTION_UNDER_WATER, (void *)&tcm->under_water);
 				}
-			} else if (touch_data->gesture_id == DTAP_DETECT) {
-				input_report_key(input_dev, KEY_WAKEUP, 1);
-				input_sync(input_dev);
-				input_report_key(input_dev, KEY_WAKEUP, 0);
-				input_sync(input_dev);
 			} else {
-				input_report_key(input_dev, KEY_GESTURE_START + touch_data->gesture_type, 1);
+				input_report_key(input_dev, KEY_F4, 1);
 				input_sync(input_dev);
-				input_report_key(input_dev, KEY_GESTURE_START + touch_data->gesture_type, 0);
+				input_report_key(input_dev, KEY_F4, 0);
 				input_sync(input_dev);
 			}
 		}
@@ -1043,7 +966,7 @@ exit:
  */
 static int syna_dev_create_input_device(struct syna_tcm *tcm)
 {
-	int retval = 0, i = 0;
+	int retval = 0;
 	struct tcm_dev *tcm_dev = tcm->tcm_dev;
 	struct input_dev *input_dev = NULL;
 
@@ -1094,11 +1017,8 @@ static int syna_dev_create_input_device(struct syna_tcm *tcm)
 
 	set_bit(KEY_SLEEP, input_dev->keybit);
 #ifdef ENABLE_WAKEUP_GESTURE
-	set_bit(KEY_WAKEUP, input_dev->keybit);
-	input_set_capability(input_dev, EV_KEY, KEY_WAKEUP);
-	for (i = UP_VEE; i <= S_GESTURE; i++) {
-		set_bit(KEY_GESTURE_START + i, input_dev->keybit);
-	}
+	set_bit(KEY_F4, input_dev->keybit);
+	input_set_capability(input_dev, EV_KEY, KEY_F4);
 	set_bit(KEY_UNDER_WATER, input_dev->keybit);
 	input_set_capability(input_dev, EV_KEY, KEY_UNDER_WATER);
 	set_bit(KEY_ON_WATER, input_dev->keybit);
