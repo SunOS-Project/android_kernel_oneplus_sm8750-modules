@@ -321,6 +321,17 @@ camera-$(CONFIG_SPECTRA_VMRM) += \
 	drivers/cam_vmrm/cam_vmrm.o \
 	drivers/cam_vmrm/cam_vmrm_gh_wrapper.o
 
+camera-$(CONFIG_SPECTRA_OPLUS) += \
+	drivers/oplus/cam_sensor_module/cam_module_utils/cam_kevent_fb_custom.o \
+	drivers/oplus/cam_sensor_module/cam_module_utils/cam_trace_custom.o \
+	drivers/oplus/cam_sensor_module/cam_link/oplus_cam_eeprom.o \
+	drivers/oplus/cam_sensor_module/cam_link/oplus_cam_sensor.o \
+	drivers/oplus/cam_sensor_module/cam_link/oplus_cam_ois.o \
+	drivers/oplus/cam_sensor_module/cam_link/oplus_cam_actuator.o \
+	drivers/oplus/cam_sensor_module/cam_link/oplus_cam_insensor_eeprom.o
+
+ccflags-y += -DOPLUS_FEATURE_CAMERA_COMMON -DFEATURE_ENABLE=1
+
 camera-y += drivers/camera_main.o
 
 obj-m += camera.o
