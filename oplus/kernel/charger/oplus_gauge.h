@@ -120,6 +120,8 @@ struct oplus_gauge_operations {
 	int (*get_prev_bcc_parameters)(char *buf);
 	int (*set_bcc_parameters)(const char *buf);
 	bool (*set_gauge_power_sel)(int sel);
+	bool (*set_gauge_aging)(int sel);
+	bool (*set_gauge_cycles)(int sel);
 	bool (*check_rc_sfr)(void);
 	int (*soft_reset_rc_sfr)(void);
 	int (*get_gauge_info)(u8 *info, int len);

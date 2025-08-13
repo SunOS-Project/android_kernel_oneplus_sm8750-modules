@@ -141,6 +141,8 @@
 
 /*S3910 addr high bit is palm flag, 60*/
 #define PALM_FLAG       6
+#define FINGER_FLAG     1
+#define GLOVE_FLAG      2
 
 #define GESTURE_MODE_SWITCH_RETRY_TIMES     5
 #define MAX_HEALTH_REPORT_LEN 50
@@ -297,6 +299,7 @@ enum dynamic_config_id {
 	DC_SET_DIFFER_READ = 0xF3,
 	DC_GESTURE_MASK = 0xFE,
 	DC_LOW_TEMP_ENABLE = 0xFD,
+	DC_GLOVE_MODE_ENABLED = 0x0D,
 };
 
 enum command {
@@ -319,6 +322,7 @@ enum command {
 	CMD_SET_STATIC_CONFIG               = 0x22,
 	CMD_GET_DYNAMIC_CONFIG              = 0x23,
 	CMD_SET_DYNAMIC_CONFIG              = 0x24,
+	CMD_SET_LONG_CONFIG                 = 0xc7,
 	CMD_GET_TOUCH_REPORT_CONFIG         = 0x25,
 	CMD_SET_TOUCH_REPORT_CONFIG         = 0x26,
 	CMD_REZERO                          = 0x27,
@@ -512,6 +516,8 @@ struct touch_data {
 	unsigned int nsm_state;
 	unsigned int num_of_active_objects;
 	unsigned int num_of_cpu_cycles;
+	unsigned int glove_flag;
+	unsigned int glove_status;
 };
 
 struct touch_hcd {

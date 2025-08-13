@@ -9,25 +9,6 @@
  * the Free Software Foundation
  */
 
-#include <linux/module.h>
-#include <linux/kernel.h>
-#include <linux/i2c.h>
-#include <linux/of_gpio.h>
-#include <linux/delay.h>
-#include <linux/device.h>
-#include <linux/firmware.h>
-#include <linux/slab.h>
-#include <linux/version.h>
-#include <linux/input.h>
-#include <linux/interrupt.h>
-#include <linux/debugfs.h>
-#include <linux/miscdevice.h>
-#include <linux/uaccess.h>
-#include <linux/syscalls.h>
-#include <linux/power_supply.h>
-#include <linux/vmalloc.h>
-#include <linux/pm_qos.h>
-
 #include "sih688x_reg.h"
 #include "sih688x.h"
 #include "haptic.h"
@@ -36,6 +17,28 @@
 #include "sih688x_func_config.h"
 #ifdef CONFIG_HAPTIC_FEEDBACK_MODULE
 #include "../../haptic_feedback/haptic_feedback.h"
+#endif
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+static struct vmax_map vmax_map[] = {
+	{800,  0x3C, 0x40},
+	{900,  0x3C, 0x49},
+	{1000, 0x3C, 0x51},
+	{1100, 0x3C, 0x5A},
+	{1200, 0x3C, 0x62},
+	{1300, 0x3C, 0x6B},
+	{1400, 0x3C, 0x73},
+	{1500, 0x3C, 0x7C},
+	{1600, 0x3E, 0x80},
+	{1700, 0x42, 0x80},
+	{1800, 0x46, 0x80},
+	{1900, 0x4A, 0x80},
+	{2000, 0x4F, 0x80},
+	{2100, 0x53, 0x80},
+	{2200, 0x56, 0x80},
+	{2300, 0x5A, 0x80},
+	{2400, 0x5B, 0x80},
+};
 #endif
 
 /***********************************************
@@ -1765,6 +1768,66 @@ static void sih688x_osc_cali(sih_haptic_t *sih_haptic)
 		&sih_haptic->osc_para.osc_data);
 }
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+static void sih688x_parse_dt(struct device *dev, sih_haptic_t *sih_haptic,
+	struct device_node *np)
+{
+	uint32_t val = 0;
+	int i =0;
+	uint32_t max_boost_voltage = 0;
+	uint8_t vmax[VMAX_GAIN_NUM];
+	uint8_t gain[VMAX_GAIN_NUM];
+
+	if (of_property_read_u32(np, "sih688x_boost_voltage", &max_boost_voltage))
+		sih_haptic->chip_ipara.drv_vboost = DEFAULT_BOOST_VOLT;
+	else
+		sih_haptic->chip_ipara.drv_vboost = (uint8_t)max_boost_voltage;
+	hp_info("%s: boost_voltage=%d\n", __func__, sih_haptic->chip_ipara.drv_vboost);
+
+
+	val = of_property_read_u8_array(np, "sih688x_vmax",
+							vmax, ARRAY_SIZE(vmax));
+	if (val != 0) {
+		hp_info("sih688x_vmax not found");
+	} else {
+		for (i = 0; i < ARRAY_SIZE(vmax); i++) {
+			vmax_map[i].vmax = vmax[i];
+			hp_info("sih688x vmax_map vmax: 0x%x vmax: 0x%x", vmax_map[i].vmax, vmax[i]);
+		}
+	}
+	val = of_property_read_u8_array(np, "sih688x_gain",
+						gain, ARRAY_SIZE(gain));
+	if (val != 0) {
+		hp_info("sih688x_gain not found");
+	} else {
+		for (i = 0; i < ARRAY_SIZE(gain); i++) {
+			vmax_map[i].gain = gain[i];
+			hp_info("sih688x vmax_map gain: 0x%x gain: 0x%x", vmax_map[i].gain, gain[i]);
+		}
+	}
+}
+
+static int sih688x_convert_level_to_vmax(sih_haptic_t *sih_haptic, struct vmax_map *map, int val)
+{
+	int i;
+	for (i = 0; i < ARRAY_SIZE(vmax_map); i++) {
+		if (val == vmax_map[i].level) {
+			map->vmax = vmax_map[i].vmax;
+			map->gain = vmax_map[i].gain;
+			break;
+		}
+	}
+	if (i == ARRAY_SIZE(vmax_map)) {
+		map->vmax = vmax_map[i - 1].vmax;
+		map->gain = vmax_map[i - 1].gain;
+	}
+	if (map->vmax > sih_haptic->chip_ipara.drv_vboost)
+		map->vmax = sih_haptic->chip_ipara.drv_vboost;
+
+	return i;
+}
+#endif
+
 static void sih688x_init(sih_haptic_t *sih_haptic)
 {
 	uint8_t reg_val = 0;
@@ -1905,4 +1968,8 @@ haptic_func_t sih_688x_func_list = {
 	.read_detect_fifo = sih688x_read_detect_fifo,
 	.get_cont_para = sih688x_get_cont_para,
 	.set_cont_para = sih688x_set_cont_para,
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	.parse_dt = sih688x_parse_dt,
+	.convert_level_to_vmax = sih688x_convert_level_to_vmax,
+#endif
 };

@@ -41,7 +41,7 @@
 
 #define RT1711H_DRV_VERSION	"2.0.6_G"
 
-#define RT1711H_IRQ_WAKE_TIME	(500) /* ms */
+#define RT1711H_IRQ_WAKE_TIME	(1000) /* ms */
 
 
 #define RICHTEK_1711_VID	0x29cf

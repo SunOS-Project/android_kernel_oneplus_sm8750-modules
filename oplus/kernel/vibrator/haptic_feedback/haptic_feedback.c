@@ -19,6 +19,11 @@
 #include <linux/workqueue.h>
 #include <linux/kthread.h>
 #include <linux/sched/clock.h>
+#include <linux/version.h>
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0))
+#include <linux/of_device.h>
+#include <linux/platform_device.h>
+#endif
 #include "haptic_feedback.h"
 #include <soc/oplus/dft/kernel_fb.h>
 
@@ -714,7 +719,11 @@ class_creat_err:
 	return ret;
 }
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0))
+static void oplus_haptic_feedback_remove(struct platform_device *pdev)
+#else
 static int oplus_haptic_feedback_remove(struct platform_device *pdev)
+#endif
 {
 	struct oplus_haptic_track *hapric_track = platform_get_drvdata(pdev);
 
@@ -732,7 +741,9 @@ static int oplus_haptic_feedback_remove(struct platform_device *pdev)
 	device_destroy(cls, MKDEV(major, 0));
 	class_destroy(cls);
 	unregister_chrdev(major, "haptic_fb");
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 12, 0))
 	return 0;
+#endif
 }
 
 static const struct of_device_id oplus_haptic_drv_match[] = {

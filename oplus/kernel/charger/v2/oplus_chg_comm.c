@@ -480,7 +480,7 @@ struct oplus_chg_comm {
 
 	unsigned int nvid_support_flags;
 	int plc_status;
-
+	bool use_pm_power_off_with_hightemp;
 	bool dec_cv_down_init;
 	struct mutex dec_data_lock;
 	struct dec_cv_down_load dec_cv_down_info;
@@ -490,6 +490,15 @@ struct oplus_chg_comm {
 	struct delayed_work dec_vol_info_trigger_work;
 	struct work_struct set_reserve_dec_cv_down_info_work;
 };
+
+typedef struct {
+	int charge_limit_enable;
+	int charge_limit_value;
+	int is_force_set_charge_limit;
+	int charge_limit_recharge_value;
+	int callname;
+}chg_up_limit_info;
+static chg_up_limit_info chg_up_limit_data;
 
 static struct oplus_comm_spec_config default_spec = {
 	.fcc_gear_shake_mv = {
@@ -3289,6 +3298,17 @@ static bool oplus_comm_is_under_uv(struct oplus_chg_comm *chip)
 		return false;
 }
 
+#define CHG_UP_LIMIT_FAIL_THRESHOLD	3
+#define CHG_UP_LIMIT_REAL_SOC_THRESHOLD	99
+static bool get_chg_up_not_limit_state(int ui_soc, int smooth_soc)
+{
+	if (chg_up_limit_data.charge_limit_enable == 1 && ui_soc >= chg_up_limit_data.charge_limit_value &&
+	    smooth_soc <= (ui_soc + CHG_UP_LIMIT_FAIL_THRESHOLD) && smooth_soc <= CHG_UP_LIMIT_REAL_SOC_THRESHOLD)
+		return false;
+	else
+		return true;
+}
+
 #define CHARGE_FORCE_DEC_INTERVAL	60
 #define NON_CHARGE_FORCE_DEC_INTERVAL	20
 #define VBAT_MIN			2500
@@ -3472,7 +3492,7 @@ static void oplus_comm_ui_soc_update(struct oplus_chg_comm *chip)
 
 	/* Here ui_soc is only allowed to drop to 1% as low as possible */
 	mmi_chg = oplus_comm_get_mmi_state(chip);
-	if (charging && mmi_chg) {
+	if (charging && mmi_chg && get_chg_up_not_limit_state(ui_soc, smooth_soc)) {
 		if (ui_soc < smooth_soc &&
 		    time_is_before_jiffies(soc_up_jiffies)) {
 			ui_soc = (ui_soc < 100) ? (ui_soc + 1) : 100;
@@ -3750,7 +3770,8 @@ void oplus_comm_ui_soc_decimal_deinit(struct oplus_chg_comm *chip)
 	ui_soc = (soc_decimal->ui_soc_integer + soc_decimal->ui_soc_decimal) / 1000;
 	mutex_unlock(&chip->decimal_lock);
 	if (ui_soc != 0) {
-		if (soc_decimal->ui_soc_decimal != 0 && ui_soc < chip->smooth_soc)
+		if (soc_decimal->ui_soc_decimal != 0 && ui_soc < chip->smooth_soc &&
+		    get_chg_up_not_limit_state(ui_soc, chip->smooth_soc))
 			ui_soc = (ui_soc < 100) ? (ui_soc + 1) : 100;
 		oplus_comm_set_ui_soc(chip, ui_soc);
 	}
@@ -3800,7 +3821,7 @@ static void oplus_comm_show_ui_soc_decimal(struct work_struct *work)
 
 	/*calculate the speed*/
 	mmi_chg = oplus_comm_get_mmi_state(chip);
-	if (icharging > 0 && mmi_chg) {
+	if (icharging > 0 && mmi_chg && get_chg_up_not_limit_state(chip->ui_soc, chip->smooth_soc)) {
 		if (!oplus_comm_calculate_eis_soc_speed(chip, &speed))
 			speed = 100000 * icharging * UPDATE_TIME * batt_num / (chip->batt_fcc * 3600);
 
@@ -3819,6 +3840,11 @@ static void oplus_comm_show_ui_soc_decimal(struct work_struct *work)
 	}
 	if (speed > 500)
 		speed = 500;
+
+	if (get_chg_up_not_limit_state(chip->ui_soc, chip->smooth_soc) == false) {
+		speed = 0;
+		soc_decimal->ui_soc_decimal = 0;
+	}
 
 	mutex_lock(&chip->decimal_lock);
 	soc_decimal->ui_soc_decimal += speed;
@@ -3861,15 +3887,6 @@ is_chg_suspend_votable_available(struct oplus_chg_comm *chip)
 	return !!chip->chg_suspend_votable;
 }
 
-typedef struct {
-    int charge_limit_enable;
-    int charge_limit_value;
-    int is_force_set_charge_limit;
-    int charge_limit_recharge_value;
-    int callname;
-}chg_up_limit_info;
-static chg_up_limit_info chg_up_limit_data;
-
 int oplus_set_chg_up_limit(struct oplus_mms *topic, int charge_limit_enable, int charge_limit_value,
 	int is_force_set_charge_limit, int charge_limit_recharge_value, int callname)
 {
@@ -3891,12 +3908,65 @@ int oplus_set_chg_up_limit(struct oplus_mms *topic, int charge_limit_enable, int
 	return 1;
 }
 
+#define DEFAULT_OVER_CHARGE_DOD 550
+static bool chg_up_limit_decimal_enable(struct oplus_chg_comm *chip)
+{
+	union mms_msg_data data = { 0 };
+	int ui_soc_decimal;
+	int batt_rm;
+	int batt_fcc;
+
+	if (chip == NULL || chip->gauge_topic == NULL) {
+		chg_err("chg_up chip->gauge_topic == NULL\n");
+		return true;
+	}
+
+	oplus_mms_get_item_data(chip->gauge_topic, GAUGE_ITEM_RM, &data, false);
+	batt_rm = data.intval;
+	if (batt_rm < 0) {
+		chg_err("batt_rm is < 0\n");
+		goto out;
+	}
+	oplus_mms_get_item_data(chip->gauge_topic, GAUGE_ITEM_FCC, &data, false);
+	batt_fcc = data.intval;
+	if (batt_fcc == 0) {
+		chg_err("batt_fcc is 0\n");
+		goto out;
+	}
+	ui_soc_decimal =
+		batt_rm * 100000 / batt_fcc;
+	if (ui_soc_decimal >
+	    (chg_up_limit_data.charge_limit_value - 1) * 1000 + DEFAULT_OVER_CHARGE_DOD ||
+	    chip->smooth_soc > chg_up_limit_data.charge_limit_value) {
+		chg_info("chg_up get_ui_soc_decimal %d %d %d %d %d\n",
+		    ui_soc_decimal, batt_rm, batt_fcc, chip->smooth_soc,
+		    chg_up_limit_data.charge_limit_value);
+		return true;
+	}
+	return false;
+
+out:
+	if (chip->smooth_soc > chg_up_limit_data.charge_limit_value) {
+		chg_info("chg_up get_ui_soc_decimal %d %d\n",
+		    chip->smooth_soc, chg_up_limit_data.charge_limit_value);
+		return true;
+	}
+	return false;
+}
+
 static int oplus_enforce_chg_up_limit_result(struct oplus_chg_comm *chip, bool cut_off_charge)
 {
 	int val = cut_off_charge;
 	int rc = 0;
 	static int pre_val = 0;
 	static int pre_is_force_set_flag = 0;
+	bool decimal_status;
+
+	if (chip == NULL) {
+		chg_err("chip == NULL\n");
+		return rc;
+	}
+
 	chg_debug("oplus_set_chg_up_limit %d\n", val);
 	if ((pre_val == val) && (pre_is_force_set_flag == chg_up_limit_data.is_force_set_charge_limit)) {
 		if ((val == true && (get_client_vote(chip->chg_disable_votable, CHG_LIMIT_CHG_VOTER) > 0 ||
@@ -3907,6 +3977,26 @@ static int oplus_enforce_chg_up_limit_result(struct oplus_chg_comm *chip, bool c
 			chg_debug("set same chg up limit command %d %d\n", val, pre_is_force_set_flag);
 			return rc;
 		}
+	}
+
+	/* When the charging upper limit suspend is enabled before,
+	and ui_soc drops to the charging upper limit value, change it to disable charge. */
+	if (cut_off_charge == true &&
+	    chip->ui_soc == chg_up_limit_data.charge_limit_value &&
+		chg_up_limit_data.is_force_set_charge_limit == 1 &&
+		get_client_vote(chip->chg_suspend_votable, CHG_LIMIT_CHG_VOTER) > 0) {
+		rc = vote(chip->chg_suspend_votable, CHG_LIMIT_CHG_VOTER, false, 0, false);
+		if (is_chg_disable_votable_available(chip))
+			rc = vote(chip->chg_disable_votable, CHG_LIMIT_CHG_VOTER,
+				  true, val, false);
+		else
+			rc = -ENOTSUPP;
+	}
+
+	if (chip->ui_soc == chg_up_limit_data.charge_limit_value && cut_off_charge == true) {
+		decimal_status = chg_up_limit_decimal_enable(chip);
+		if (decimal_status == false)
+			return rc;
 	}
 
 	if (chg_up_limit_data.is_force_set_charge_limit == 0 || chip->ui_soc == chg_up_limit_data.charge_limit_value) {
@@ -3985,7 +4075,8 @@ static void monitor_ui_soc_to_enable_chg_up_limit(struct oplus_chg_comm *chip, b
 		chg_up_limit_data.charge_limit_recharge_value, over_count);
 
 	if (chg_up_limit_data.charge_limit_enable == 1) {
-		if (chip->ui_soc >= chg_up_limit_data.charge_limit_value) {
+		if (chip->ui_soc >= chg_up_limit_data.charge_limit_value &&
+			chg_up_limit_data.charge_limit_value < OPLUS_FULL_SOC) {
 			over_count++;
 			if (over_count >= CHG_UP_DELAY_COUNT || chip->vooc_charging || chip->ufcs_charging ||
 			    chip->pps_charging || is_wls_fastchg_started(chip)) {
@@ -3993,7 +4084,8 @@ static void monitor_ui_soc_to_enable_chg_up_limit(struct oplus_chg_comm *chip, b
 				oplus_enforce_chg_up_limit_result(chip, true);
 			}
 			return;
-		} else if (chip->ui_soc >= chg_up_limit_data.charge_limit_recharge_value) {
+		} else if (chip->ui_soc >= chg_up_limit_data.charge_limit_recharge_value &&
+		    chg_up_limit_data.charge_limit_recharge_value < OPLUS_FULL_SOC) {
 			over_count = 0;
 			return;
 		} else {
@@ -8220,8 +8312,10 @@ static int oplus_comm_parse_dt(struct oplus_chg_comm *comm_dev)
 		config->chg_shutdown_max_mv = -EINVAL;
 	config->dual_panel_support = of_property_read_bool(node, "oplus,dual_panel_support");
 	config->not_pop_up = of_property_read_bool(node, "oplus,not_pop_up");
-	chg_err("not_pop_up = %d\n", config->not_pop_up);
+	chg_info("not_pop_up = %d\n", config->not_pop_up);
 
+	comm_dev->use_pm_power_off_with_hightemp = of_property_read_bool(node, "oplus,pm_power_off_with_hightemp");
+	chg_info("comm_dev->use_pm_power_off_with_hightemp = %d\n", comm_dev->use_pm_power_off_with_hightemp);
 	oplus_comm_parse_dec_vol_dt(comm_dev);
 
 	oplus_comm_parse_smooth_soc_dt(comm_dev);
@@ -8461,6 +8555,11 @@ static ssize_t proc_ui_soc_decimal_read(struct file *file,
 		val = 0;
 	}
 
+	if (get_chg_up_not_limit_state(chip->ui_soc, chip->smooth_soc) == false) {
+		soc_decimal->init_decimal_ui_soc = 0;
+		val = 0;
+	}
+
 	sprintf(read_data, "%d, %d", soc_decimal->init_decimal_ui_soc / 10, val);
 	chg_info("APK successful, %d,%d", soc_decimal->init_decimal_ui_soc / 10, val);
 	len = sprintf(page, "%s", read_data);
@@ -8601,7 +8700,13 @@ static int oplus_comm_tbatt_power_off_kthread(void *arg)
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))
 					machine_power_off();
 #else
-					kernel_power_off();
+					if (chip->use_pm_power_off_with_hightemp && pm_power_off) {
+						chg_err("pm_power_off\n");
+						pm_power_off();
+					} else {
+						chg_err("kernel_power_off\n");
+						kernel_power_off();
+					}
 #endif
 				}
 			}
@@ -9258,7 +9363,6 @@ __maybe_unused static int oplus_comm_set_led_on(struct oplus_chg_comm *chip, boo
 		return 0;
 
 	chip->led_on = on;
-	chg_info("set led_on=%d\n", chip->led_on);
 	msg = oplus_mms_alloc_msg(MSG_TYPE_ITEM, MSG_PRIO_MEDIUM,
 				  COMM_ITEM_LED_ON);
 	if (msg == NULL) {
@@ -9271,6 +9375,7 @@ __maybe_unused static int oplus_comm_set_led_on(struct oplus_chg_comm *chip, boo
 		kfree(msg);
 		return rc;
 	}
+	chg_info("set led_on=%d\n", chip->led_on);
 
 	return 0;
 }

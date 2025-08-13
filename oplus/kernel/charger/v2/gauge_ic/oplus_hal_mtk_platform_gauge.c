@@ -694,6 +694,88 @@ static int oplus_mt6375_guage_get_batt_hmac(struct oplus_chg_ic_dev *ic_dev, boo
 	return 0;
 }
 
+#define RESET_GAUGE_RETRY_TIMES 2
+static int oplus_mt6375_guage_set_reset_gauge(struct oplus_chg_ic_dev *ic_dev, const int *buf)
+{
+	int enable = 0;
+	int reset_soh = 0;
+	int reset_cc = 0;
+	int rc = 0;
+	int get_soh;
+	int get_cc;
+	int retry_count = 0;
+
+	if (buf == NULL) {
+		chg_err("oplus_mt6375_guage_set_reset_gauge buf= NULL\n");
+		return -EINVAL;
+	}
+
+	enable = buf[0];
+	reset_soh = buf[1];
+	reset_cc = buf[2];
+	chg_info("oplus_mt6375_guage_set_reset_gauge = %d %d %d\n", enable, reset_soh, reset_cc);
+
+	if (enable != 1) {
+		chg_debug("%s: Reset not enabled\n", __func__);
+		goto out;
+	}
+
+	do {
+		retry_count++;
+		if (!g_gauge_chip) {
+			chg_err("%s: Gauge chip not initialized\n", __func__);
+			rc = -ENODEV;
+			break;
+		}
+
+		if (!g_gauge_chip->gauge_ops) {
+			chg_err("%s: Gauge ops undefined\n", __func__);
+			rc = -ENOTSUPP;
+			break;
+		}
+
+		if (!g_gauge_chip->gauge_ops->set_gauge_aging) {
+			chg_err("%s: set_gauge_aging not supported\n", __func__);
+			rc = -ENOTSUPP;
+			break;
+		}
+
+		if (!g_gauge_chip->gauge_ops->set_gauge_cycles) {
+			chg_err("%s: set_gauge_cycles not supported\n", __func__);
+			rc = -ENOTSUPP;
+			break;
+		}
+
+		get_soh = g_gauge_chip->gauge_ops->get_battery_soh();
+		if (get_soh != reset_soh) {
+			g_gauge_chip->gauge_ops->set_gauge_aging(reset_soh);
+			continue;
+		}
+
+		get_cc = g_gauge_chip->gauge_ops->get_battery_cc();
+		chg_info("%s: Reset retry_count = %d %d %d %d\n", __func__, retry_count, enable, get_soh, get_cc);
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0))
+		if (get_cc != reset_cc) {
+#else
+		if (get_cc != 0) {
+#endif
+			g_gauge_chip->gauge_ops->set_gauge_cycles(reset_cc);
+			continue;
+		}
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0))
+		if (get_soh == reset_soh && get_cc == reset_cc) {
+#else
+		if (get_soh == reset_soh && get_cc == 0) {
+#endif
+			chg_info("%s: Reset successful\n", __func__);
+			break;
+		}
+	} while (retry_count < RESET_GAUGE_RETRY_TIMES);
+
+out:
+	return rc;
+}
+
 static int oplus_mt6375_guage_set_batt_full(struct oplus_chg_ic_dev *ic_dev, bool full)
 {
 	g_gauge_chip->gauge_ops->set_battery_full(full);
@@ -1050,6 +1132,11 @@ static void *oplus_chg_get_func(struct oplus_chg_ic_dev *ic_dev,
 		func = OPLUS_CHG_IC_FUNC_CHECK(
 			OPLUS_IC_FUNC_GAUGE_SET_BATT_FULL,
 			oplus_mt6375_guage_set_batt_full);
+		break;
+	case OPLUS_IC_FUNC_GAUGE_SET_RESET_GAUGE_DATE:
+		func = OPLUS_CHG_IC_FUNC_CHECK(
+			OPLUS_IC_FUNC_GAUGE_SET_RESET_GAUGE_DATE,
+			oplus_mt6375_guage_set_reset_gauge);
 		break;
 	case OPLUS_IC_FUNC_GAUGE_UPDATE_DOD0:
 		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_GAUGE_UPDATE_DOD0,

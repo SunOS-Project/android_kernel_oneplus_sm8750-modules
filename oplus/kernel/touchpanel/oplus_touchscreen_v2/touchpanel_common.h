@@ -1017,7 +1017,8 @@ struct touchpanel_data {
 	bool game_switch_support;                           /*indicate game switch support or not*/
 	bool face_detect_support;                           /*touch porximity function*/
 	bool fingerprint_underscreen_support;               /*fingerprint underscreen support*/
-	bool fingerprint_not_report_in_suspend;
+	bool fingerprint_not_report_in_suspend;             /*fingerprint not report in suspending*/
+	bool fingerprint_error_report_support;              /*fingerprint error report support*/
 	bool sec_long_low_trigger;                          /*samsung s6d7ate ic int feature*/
 	bool suspend_gesture_cfg;
 	bool auto_test_force_pass_support;                  /*auto test force pass in early project*/
@@ -1214,6 +1215,7 @@ struct touchpanel_data {
 	int noise_level;                                    /*for game mode control*/
 	int high_frame_value;
 	int limit_enable;                                   /*control state of limit enable */
+	int edge_limit_switch_write_value;                  /*control limit_switch enable */
 	int tp_ic_touch_num;                                 /*tp ic get touch num */
 	int last_tp_ic_touch_num;                            /*last tp ic get touch num */
 	int pen_mode_tp_state;
@@ -1439,6 +1441,8 @@ struct oplus_touchpanel_operations {
 
 	void (*freq_hop_trigger)(void *chip_data); /*trigger frequency-hopping*/
 	void (*force_water_mode)(void *chip_data, bool enable); /*force enter water mode*/
+	void (*set_fp_error_report)(void *chip_data, bool enable); /*set fp error report*/
+	void (*inject_wdt_reset)(void *chip_data, int value); /*inject watchdog reset*/
 	void (*get_water_mode)(void *chip_data); /*force enter water mode*/
 	void (*get_glove_mode)(void *chip_data, int *enable, int *count); /*force enter glove mode*/
 	void (*set_noise_modetest)(void *chip_data, bool enable);
@@ -1450,6 +1454,7 @@ struct oplus_touchpanel_operations {
 				   struct kernel_grip_info *grip_info);          /*enable kernel grip in fw*/
 	bool (*tp_irq_throw_away)(void *chip_data);
 	void (*rate_white_list_ctrl)(void *chip_data, int value);
+	void (*edge_limit_switch_write)(void *chip_data, int value);
 	int (*smooth_lv_set)(void *chip_data, int level);
 	int (*sensitive_lv_set)(void *chip_data, int level);
 	int (*diaphragm_touch_lv_set)(void *chip_data, int level);

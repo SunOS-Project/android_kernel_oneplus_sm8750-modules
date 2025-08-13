@@ -3,6 +3,7 @@
 
 #include <oplus_mms.h>
 #include "oplus_sili.h"
+#include <oplus_sec.h>
 
 #define GAUGE_IC_NUM_MAX 2
 #define CALIB_TIME_STR_LEN 32
@@ -29,6 +30,7 @@ struct oplus_mms_gauge {
 	struct oplus_mms *parallel_topic;
 	struct oplus_mms *batt_bal_topic;
 	struct oplus_mms *wls_topic;
+	struct oplus_mms *cpa_topic;
 	struct mms_subscribe *comm_subs;
 	struct mms_subscribe *wired_subs;
 	struct mms_subscribe *gauge_subs;
@@ -36,6 +38,7 @@ struct oplus_mms_gauge {
 	struct mms_subscribe *parallel_subs;
 	struct mms_subscribe *wls_subs;
 	struct mms_subscribe *batt_bal_subs;
+	struct mms_subscribe *cpa_subs;
 
 	struct delayed_work hal_gauge_init_work;
 	struct delayed_work get_reserve_calib_info_work;
@@ -72,6 +75,8 @@ struct oplus_mms_gauge {
 	struct ddrc_temp_curves ddrc_curve;
 	struct ddrc_temp_curves ddrc_curve_sub;
 	int ddrc_num;
+
+	struct oplus_sec *sec_chip;
 
 	int device_type;
 	int device_type_for_vooc;

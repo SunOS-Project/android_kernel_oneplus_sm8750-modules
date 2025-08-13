@@ -391,6 +391,11 @@ enum daemon_states {
 	STATE_TERMINATE,
 };
 
+enum FingerprintEnableBit {
+    FINGERPIRNT_SCREEN_OFF_ENABLE_BIT = 0,
+    FINGERPIRNT_SCREEN_ON_ENABLE_BIT,
+};
+
 #if defined(ENABLE_HELPER)
 /**
  * @brief: Tasks for helper
@@ -772,6 +777,7 @@ struct syna_tcm {
 	struct exception_data    exception_data;            /*exception_data monitor data*/
 
 	bool fingerprint_not_report_in_suspend;
+	bool syna_screenon_fingerprint_mode;
 	/* fifo to pass the data to userspace */
 	unsigned int fifo_remaining_frame;
 	struct list_head frame_fifo_queue;

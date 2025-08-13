@@ -62,6 +62,9 @@
 #define PDQC_SALE_MODE_ALLOW_BUCK_MV	5000
 #define DPQC_CONNECT_ERROR_COUNT_LEVEL	3
 #define WAIT_BC1P2_GET_TYPE 600
+#define RETENTION_QC_WAIT_BC1P2_GET_TYPE 1000
+#define COMMON_POWER_CHECK_MIN_SOC	20
+#define COMMON_POWER_CHECK_RECOVERY_MSECS	600
 
 struct oplus_wired_spec_config {
 	int32_t pd_iclmax_ma;
@@ -127,6 +130,7 @@ struct oplus_chg_wired {
 	struct delayed_work pd_config_work;
 	struct delayed_work qc_config_work;
 	struct delayed_work pd_boost_icl_disable_work;
+	struct delayed_work common_power_check_recover_work;
 
 	struct power_supply *usb_psy;
 	struct power_supply *batt_psy;
@@ -144,6 +148,7 @@ struct oplus_chg_wired {
 	struct completion pd_action_ack;
 	struct completion qc_check_ack;
 	struct completion pd_check_ack;
+	struct completion retention_wait_bc12;
 
 	bool unwakelock_chg;
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 9, 0))
@@ -164,6 +169,7 @@ struct oplus_chg_wired {
 	bool vooc_started;
 	bool pd_boost_disable;
 	bool cpa_support;
+	bool need_common_power_check;
 
 	int chg_type;
 	int vbus_set_mv;
@@ -831,6 +837,15 @@ static void oplus_wired_pd_boost_icl_disable_work(struct work_struct *work)
 	vote(chip->icl_votable, BOOST_VOTER, false, 0, true);
 }
 
+static void oplus_common_power_check_recover_work(struct work_struct *work)
+{
+	struct oplus_chg_wired *chip = container_of(work, struct oplus_chg_wired, common_power_check_recover_work.work);
+
+	vote(chip->icl_votable, COMMON_POWER_CHECK, false, 0, true);
+	chip->need_common_power_check = false;
+	chg_info("oplus_common_power_check_recover_work need_common_power_check %d\n", chip->need_common_power_check);
+}
+
 #define PD_RETRY_DELAY msecs_to_jiffies(1000)
 #define PD_RETRY_COUNT_MAX 3
 static void oplus_wired_pd_config_work(struct work_struct *work)
@@ -1175,6 +1190,7 @@ static void oplus_wired_wired_subs_callback(struct mms_subscribe *subs,
 {
 	struct oplus_chg_wired *chip = subs->priv_data;
 	union mms_msg_data data = { 0 };
+	static int chg_type = 0;
 
 	switch (type) {
 	case MSG_TYPE_ITEM:
@@ -1183,11 +1199,32 @@ static void oplus_wired_wired_subs_callback(struct mms_subscribe *subs,
 			schedule_work(&chip->plugin_work);
 			break;
 		case WIRED_ITEM_CHG_TYPE:
+			oplus_mms_get_item_data(chip->wired_topic, id, &data, false);
+			if (chg_type != data.intval) {
+				chg_type = data.intval;
+				complete_all(&chip->retention_wait_bc12);
+			}
 			schedule_work(&chip->chg_type_change_work);
+			if (oplus_chg_get_common_charge_icl_support_flags()) {
+				oplus_mms_get_item_data(chip->wired_topic, id, &data, false);
+				if (data.intval != OPLUS_CHG_USB_TYPE_UNKNOWN && chip->need_common_power_check) {
+					chip->need_common_power_check = false;
+					cancel_delayed_work(&chip->common_power_check_recover_work);
+					schedule_delayed_work(&chip->common_power_check_recover_work, 0);
+				}
+			}
 			break;
 		case WIRED_ITEM_REAL_CHG_TYPE:
 			if (get_client_vote(chip->pd_boost_disable_votable, SVID_VOTER) == 0)
 				complete(&chip->pd_check_ack);
+			if (oplus_chg_get_common_charge_icl_support_flags()) {
+				oplus_mms_get_item_data(chip->wired_topic, id, &data, false);
+				if (data.intval != OPLUS_CHG_USB_TYPE_UNKNOWN && chip->need_common_power_check) {
+					chip->need_common_power_check = false;
+					cancel_delayed_work(&chip->common_power_check_recover_work);
+					schedule_delayed_work(&chip->common_power_check_recover_work, 0);
+				}
+			}
 			break;
 		case WIRED_ITEM_PRESENT:
 			oplus_mms_get_item_data(chip->wired_topic, id, &data, false);
@@ -1241,6 +1278,42 @@ static void oplus_wired_subscribe_wired_topic(struct oplus_mms *topic,
 		schedule_work(&chip->plugin_work);
 }
 
+static void oplus_common_power_check(struct oplus_chg_wired *chip)
+{
+	int temp_ui_soc = 0;
+	int chg_type = OPLUS_CHG_USB_TYPE_UNKNOWN;
+	int real_type = OPLUS_CHG_USB_TYPE_UNKNOWN;
+	union mms_msg_data data = { 0 };
+
+	if (oplus_chg_get_common_charge_icl_support_flags()) {
+		if (chip->comm_topic) {
+			oplus_mms_get_item_data(chip->comm_topic, COMM_ITEM_UI_SOC, &data,
+						false);
+			temp_ui_soc = data.intval;
+		}
+		if (chip->wired_topic) {
+			oplus_mms_get_item_data(chip->wired_topic, WIRED_ITEM_REAL_CHG_TYPE, &data,
+						false);
+			real_type = data.intval;
+			oplus_mms_get_item_data(chip->wired_topic, WIRED_ITEM_CHG_TYPE, &data,
+						false);
+			chg_type = data.intval;
+		}
+		chg_info("ui_soc %d real_type %s chg_type %s\n", temp_ui_soc,
+			oplus_wired_get_chg_type_str(real_type), oplus_wired_get_chg_type_str(chg_type));
+
+		if (temp_ui_soc >= COMMON_POWER_CHECK_MIN_SOC &&
+		    ((real_type == OPLUS_CHG_USB_TYPE_UNKNOWN && chg_type == OPLUS_CHG_USB_TYPE_UNKNOWN) ||
+		    (real_type == OPLUS_CHG_USB_TYPE_PD))) {
+			chip->need_common_power_check = true;
+			vote(chip->icl_votable, COMMON_POWER_CHECK, true, 100, false);
+			cancel_delayed_work(&chip->common_power_check_recover_work);
+			schedule_delayed_work(&chip->common_power_check_recover_work,
+						msecs_to_jiffies(COMMON_POWER_CHECK_RECOVERY_MSECS));
+		}
+	}
+}
+
 static void oplus_wired_plugin_work(struct work_struct *work)
 {
 	struct oplus_chg_wired *chip =
@@ -1256,6 +1329,7 @@ static void oplus_wired_plugin_work(struct work_struct *work)
 				false);
 	chip->chg_online = data.intval;
 	if (chip->chg_online) {
+		oplus_common_power_check(chip);
 		chip->retention_state_ready = false;
 		oplus_wired_set_awake(chip, true);
 		if (chip->gauge_topic != NULL) {
@@ -1303,6 +1377,8 @@ static void oplus_wired_plugin_work(struct work_struct *work)
 		vote(chip->icl_votable, STRATEGY_VOTER, false, 0, true);
 		vote(chip->icl_votable, USB_ENHANCE_VOTER, false, 0, false);
 		vote(chip->icl_votable, PD_PDO_ICL_VOTER, false, 0, true);
+		vote(chip->icl_votable, COMMON_POWER_CHECK, false, 0, true);
+		chip->need_common_power_check = false;
 		chip->pd_retry_count = 0;
 		chip->qc_retry_count = 0;
 		chip->qc_action = OPLUS_ACTION_NULL;
@@ -1318,6 +1394,8 @@ static void oplus_wired_plugin_work(struct work_struct *work)
 		cancel_delayed_work_sync(&chip->switch_end_recheck_work);
 		cancel_work_sync(&chip->qc_check_work);
 		cancel_work_sync(&chip->pd_check_work);
+		if (oplus_chg_get_common_charge_icl_support_flags())
+			cancel_delayed_work(&chip->common_power_check_recover_work);
 		chip->vbus_set_mv = OPLUS_CHG_VBUS_5V;
 		oplus_wired_set_err_code(chip, 0);
 
@@ -1451,11 +1529,27 @@ static void oplus_wired_qc_check_work(struct work_struct *work)
 		return;
 	}
 	if (chip->chg_type == OPLUS_CHG_USB_TYPE_QC2 ||
-		chip->chg_type == OPLUS_CHG_USB_TYPE_QC3 ||
-		chip->chg_type == OPLUS_CHG_USB_TYPE_UNKNOWN) {
-		chg_info("type is qc charging or unknown, not retry\n");
+	    chip->chg_type == OPLUS_CHG_USB_TYPE_QC3) {
+		chg_info("type is qc charging  not retry\n");
 		return;
 	}
+
+	reinit_completion(&chip->retention_wait_bc12);
+	if (chip->chg_type == OPLUS_CHG_USB_TYPE_UNKNOWN) {
+		if (!chip->retention_state) {
+			chg_info("type is unknown  not retry\n");
+			return;
+		}
+		wait_for_completion_timeout(
+			&chip->retention_wait_bc12,
+			msecs_to_jiffies(RETENTION_QC_WAIT_BC1P2_GET_TYPE));
+		chip->chg_type = oplus_wired_get_chg_type();
+		if (chip->chg_type == OPLUS_CHG_USB_TYPE_UNKNOWN) {
+			chg_info("type is unknown, not retry\n");
+			return;
+		}
+	}
+
 	oplus_wired_qc_detect_enable(true);
 	rc = wait_for_completion_timeout(
 		&chip->qc_check_ack,
@@ -2459,7 +2553,7 @@ static int oplus_wired_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, chip);
 
 	of_platform_populate(chip->dev->of_node, NULL, NULL, chip->dev);
-
+	chip->need_common_power_check = false;
 	rc = oplus_wired_parse_dt(chip);
 	if (rc < 0)
 		goto parse_dt_err;
@@ -2472,6 +2566,7 @@ static int oplus_wired_probe(struct platform_device *pdev)
 	init_completion(&chip->pd_action_ack);
 	init_completion(&chip->qc_check_ack);
 	init_completion(&chip->pd_check_ack);
+	init_completion(&chip->retention_wait_bc12);
 	INIT_WORK(&chip->plugin_work, oplus_wired_plugin_work);
 	INIT_WORK(&chip->chg_type_change_work,
 		  oplus_wired_chg_type_change_work);
@@ -2484,6 +2579,7 @@ static int oplus_wired_probe(struct platform_device *pdev)
 	INIT_DELAYED_WORK(&chip->pd_config_work, oplus_wired_pd_config_work);
 	INIT_DELAYED_WORK(&chip->retention_disconnect_work,
 		  oplus_pdqc_retention_disconnect_work);
+	INIT_DELAYED_WORK(&chip->common_power_check_recover_work, oplus_common_power_check_recover_work);
 	INIT_WORK(&chip->charger_current_changed_work,
 		  oplus_wired_charger_current_changed_work);
 	INIT_WORK(&chip->led_on_changed_work, oplus_wired_led_on_changed_work);

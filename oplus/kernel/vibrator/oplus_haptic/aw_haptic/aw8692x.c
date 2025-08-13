@@ -11,35 +11,33 @@
  * option) any later version.
  */
 
-#include <linux/module.h>
-#include <linux/kernel.h>
-#include <linux/i2c.h>
-#include <linux/of_gpio.h>
-#include <linux/delay.h>
-#include <linux/device.h>
-#include <linux/firmware.h>
-#include <linux/slab.h>
-#include <linux/version.h>
-#include <linux/input.h>
-#include <linux/interrupt.h>
-#include <linux/debugfs.h>
-#include <linux/miscdevice.h>
-#include <linux/uaccess.h>
-#include <linux/syscalls.h>
-#include <linux/power_supply.h>
-#include <linux/vmalloc.h>
-#include <linux/pm_qos.h>
-#include <sound/core.h>
-#include <sound/pcm.h>
-#include <sound/pcm_params.h>
-#include <sound/control.h>
-#include <sound/soc.h>
-
 #include "haptic_hv.h"
 #include "haptic_hv_reg.h"
 
 #ifdef CONFIG_HAPTIC_FEEDBACK_MODULE
 #include "../../haptic_feedback/haptic_feedback.h"
+#endif
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+static struct vmax_map vmax_map[] = {
+	{800,  0x28, 0x49},
+	{900,  0x28, 0x51},
+	{1000, 0x28, 0x5A},
+	{1100, 0x28, 0x62},
+	{1200, 0x28, 0x6B},
+	{1300, 0x2C, 0x73},
+	{1400, 0x30, 0x7C},
+	{1500, 0x34, 0x80},
+	{1600, 0x38, 0x80},
+	{1700, 0x3C, 0x80},
+	{1800, 0x40, 0x80},
+	{1900, 0x44, 0x80},
+	{2000, 0x48, 0x80},
+	{2100, 0x4C, 0x80},
+	{2200, 0x50, 0x80},
+	{2300, 0x54, 0x80},
+	{2400, 0x58, 0x80},
+};
 #endif
 
 static void aw8692x_tm_config(struct aw_haptic *aw_haptic, uint8_t type)
@@ -178,6 +176,19 @@ static void aw8692x_set_rtp_aei(struct aw_haptic *aw_haptic, bool flag)
 	}
 }
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+static void aw8692x_set_ram_addr(struct aw_haptic *aw_haptic)
+{
+	uint8_t ram_addr[2] = {0};
+	uint32_t base_addr = aw_haptic->ram.base_addr;
+
+	ram_addr[0] = (uint8_t)AW8692X_SET_RAMADDR_H(base_addr);
+	ram_addr[1] = (uint8_t)AW8692X_SET_RAMADDR_L(base_addr);
+
+	i2c_w_bytes(aw_haptic, AW8692X_REG_RAMADDRH, ram_addr,
+		    AW_I2C_BYTE_TWO);
+}
+#else
 static void aw8692x_set_ram_addr(struct aw_haptic *aw_haptic,
 				 uint32_t base_addr)
 {
@@ -189,6 +200,7 @@ static void aw8692x_set_ram_addr(struct aw_haptic *aw_haptic,
 	i2c_w_bytes(aw_haptic, AW8692X_REG_RAMADDRH, ram_addr,
 		    AW_I2C_BYTE_TWO);
 }
+#endif
 
 static void aw8692x_set_base_addr(struct aw_haptic *aw_haptic)
 {
@@ -830,14 +842,32 @@ static int aw8692x_juge_rtp_going(struct aw_haptic *aw_haptic)
 	return rtp_state;
 }
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
 #if IS_ENABLED(CONFIG_OPLUS_FEATURE_BSP_DRV_VND_INJECT_TEST)
 noinline
 #endif
+static void aw8692x_get_ram_data(struct aw_haptic *aw_haptic, char *buf)
+{
+	int i = 0;
+	int size = 0;
+
+	while (i < aw_haptic->ram.len) {
+		if ((aw_haptic->ram.len - i) < AW_RAMDATA_RD_BUFFER_SIZE)
+			size = aw_haptic->ram.len - i;
+		else
+			size = AW_RAMDATA_RD_BUFFER_SIZE;
+
+	i2c_r_bytes(aw_haptic, AW8692X_REG_RAMDATA, buf + i, size);
+	i += size;
+	}
+}
+#else
 static void aw8692x_get_ram_data(struct aw_haptic *aw_haptic,
 				    uint8_t *data, uint32_t size)
 {
 	i2c_r_bytes(aw_haptic, AW8692X_REG_RAMDATA, data, size);
 }
+#endif
 
 static void aw8692x_get_first_wave_addr(struct aw_haptic *aw_haptic,
 					uint8_t *wave_addr)
@@ -851,12 +881,26 @@ static void aw8692x_get_first_wave_addr(struct aw_haptic *aw_haptic,
 	wave_addr[1] = reg_array[2];
 }
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+static void aw8692x_get_wav_seq(struct aw_haptic *aw_haptic, uint32_t len)
+{
+	uint32_t i = 0;
+	uint8_t reg_val[AW_SEQUENCER_SIZE] = {0};
+
+	if (len > AW_SEQUENCER_SIZE)
+		len = AW_SEQUENCER_SIZE;
+	i2c_r_bytes(aw_haptic, AW8692X_REG_WAVCFG1, reg_val, len);
+	for (i = 0; i < len; i++)
+		aw_haptic->seq[i] = reg_val[i];
+}
+#else
 static void aw8692x_get_wav_seq(struct aw_haptic *aw_haptic, uint8_t *seq,
 				uint8_t len)
 {
 	aw_dev_dbg("%s: enter!\n", __func__);
 	i2c_r_bytes(aw_haptic, AW8692X_REG_WAVCFG1, seq, len);
 }
+#endif
 
 static size_t aw8692x_get_wav_loop(struct aw_haptic *aw_haptic, char *buf)
 {
@@ -1326,7 +1370,11 @@ static int aw8692x_container_update(struct aw_haptic *aw_haptic,
 		    __func__, (uint16_t)((af_addr_h << 8) | af_addr_l));
 
 	aw8692x_set_base_addr(aw_haptic);
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	aw8692x_set_ram_addr(aw_haptic);
+#else
 	aw8692x_set_ram_addr(aw_haptic, aw_haptic->ram.base_addr);
+#endif
 	i = aw_haptic->ram.ram_shift;
 	while (i < awinic_cont->len) {
 		if ((awinic_cont->len - i) < AW_RAMDATA_WR_BUFFER_SIZE)
@@ -1340,7 +1388,11 @@ static int aw8692x_container_update(struct aw_haptic *aw_haptic,
 	}
 
 #ifdef AW_CHECK_RAM_DATA
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	aw8692x_set_ram_addr(aw_haptic);
+#else
 	aw8692x_set_ram_addr(aw_haptic, aw_haptic->ram.base_addr);
+#endif
 	i = aw_haptic->ram.ram_shift;
 	while (i < awinic_cont->len) {
 		if ((awinic_cont->len - i) < AW_RAMDATA_RD_BUFFER_SIZE)
@@ -1430,7 +1482,9 @@ static void aw8692x_haptic_value_init(struct aw_haptic *aw_haptic)
 		aw_haptic->info.f0_pre = AW8692X_0815_F0_PRE;
 		aw_haptic->info.f0_cali_percent = AW8692X_0815_F0_CALI_PERCEN;
 		aw_haptic->info.cont_drv1_lvl = AW8692X_0815_CONT_DRV1_LVL;
+		aw_haptic->info.cont_drv2_lvl = AW8692X_0815_CONT_DRV2_LVL;
 		aw_haptic->info.cont_drv1_time = AW8692X_0815_CONT_DRV1_TIME;
+		aw_haptic->info.cont_drv2_time = AW8692X_0815_CONT_DRV2_TIME;
 		aw_haptic->info.cont_drv_width = AW8692X_0815_CONT_DRV_WIDTH;
 		aw_haptic->info.cont_wait_num = AW8692X_0815_CONT_WAIT_NUM;
 		if (!aw_haptic->info.cont_brk_time)
@@ -1471,6 +1525,100 @@ static void aw8692x_haptic_value_init(struct aw_haptic *aw_haptic)
 	aw_haptic->info.bst_vol_ram = AW8692X_BST_VOL_RAM;
 	aw_haptic->info.bst_vol_rtp = AW8692X_BST_VOL_RTP;
 }
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+static void aw8692x_parse_dt(struct device *dev, struct aw_haptic *aw_haptic,
+			     struct device_node *np)
+{
+	uint32_t val = 0;
+	int i =0;
+	uint32_t max_boost_voltage = 0;
+	uint8_t vmax[VMAX_GAIN_NUM];
+	uint8_t gain[VMAX_GAIN_NUM];
+
+	val = of_property_read_u32(np, "f0_pre", &aw_haptic->info.f0_pre);
+	if (val != 0)
+		aw_dev_err("f0_pre not found");
+	val = of_property_read_u8(np, "aw8692x_f0_cali_percent", &aw_haptic->info.f0_cali_percent);
+	if (val != 0)
+		aw_dev_err("aw8692x_f0_cali_percent not found");
+	val = of_property_read_u8(np, "aw8692x_cont_drv1_lvl", &aw_haptic->info.cont_drv1_lvl);
+	if (val != 0)
+		aw_dev_err("aw8692x_cont_drv1_lvl not found");
+	val = of_property_read_u8(np, "aw8692x_cont_drv2_lvl", &aw_haptic->info.cont_drv2_lvl);
+	if (val != 0)
+		aw_dev_err("aw8692x_cont_drv2_lvl not found");
+	val = of_property_read_u8(np, "aw8692x_cont_drv1_time", &aw_haptic->info.cont_drv1_time);
+	if (val != 0)
+		aw_dev_err("aw8692x_cont_drv1_time not found");
+	val = of_property_read_u8(np, "aw8692x_cont_drv2_time", &aw_haptic->info.cont_drv2_time);
+	if (val != 0)
+		aw_dev_err("aw8692x_cont_drv2_time not found");
+	val = of_property_read_u8(np, "aw8692x_cont_brk_time", &aw_haptic->info.cont_brk_time);
+	if (val != 0)
+		aw_dev_err("aw8692x_cont_brk_time not found");
+	val = of_property_read_u8(np, "aw8692x_cont_track_margin",
+				  &aw_haptic->info.cont_track_margin);
+	if (val != 0)
+		aw_dev_err("aw8692x_cont_track_margin not found");
+	val = of_property_read_u8(np, "aw8692x_cont_brk_gain", &aw_haptic->info.cont_brk_gain);
+	if (val != 0)
+		aw_dev_err("aw8692x_cont_brk_gain not found");
+	val = of_property_read_u8(np, "aw8692x_d2s_gain", &aw_haptic->info.d2s_gain);
+	if (val != 0)
+		aw_dev_err("aw8692x_d2s_gain not found");
+	if (of_property_read_u32(np, "aw8692x_boost_voltage", &max_boost_voltage))
+		aw_haptic->max_boost_vol = AW8692X_BST_VOL_DEFAULT;
+	else
+		aw_haptic->max_boost_vol = (uint8_t)max_boost_voltage;
+	aw_dev_info("%s: boost_voltage=%d\n", __func__, aw_haptic->max_boost_vol);
+
+	aw_haptic->info.is_enabled_one_wire = of_property_read_bool(np,
+						 "aw8692x_is_enabled_one_wire");
+	aw_dev_info("aw_haptic->info.is_enabled_one_wire = %d", aw_haptic->info.is_enabled_one_wire);
+
+	val = of_property_read_u8_array(np, "aw8692x_vmax",
+							vmax, ARRAY_SIZE(vmax));
+	if (val != 0) {
+		aw_dev_info("aw8692x_vmax not found");
+	} else {
+		for (i = 0; i < ARRAY_SIZE(vmax); i++) {
+			vmax_map[i].vmax = vmax[i];
+			aw_dev_info("aw8692x vmax_map vmax: 0x%x vmax: 0x%x", vmax_map[i].vmax, vmax[i]);
+		}
+	}
+	val = of_property_read_u8_array(np, "aw8692x_gain",
+						gain, ARRAY_SIZE(gain));
+	if (val != 0) {
+		aw_dev_info("aw8692x_gain not found");
+	} else {
+		for (i = 0; i < ARRAY_SIZE(gain); i++) {
+			vmax_map[i].gain = gain[i];
+			aw_dev_info("aw8692x vmax_map gain: 0x%x gain: 0x%x", vmax_map[i].gain, gain[i]);
+		}
+	}
+}
+
+static int aw8692x_convert_level_to_vmax(struct aw_haptic *aw_haptic, struct vmax_map *map, int val)
+{
+	int i;
+	for (i = 0; i < ARRAY_SIZE(vmax_map); i++) {
+		if (val == vmax_map[i].level) {
+			map->vmax = vmax_map[i].vmax;
+			map->gain = vmax_map[i].gain;
+			break;
+		}
+	}
+	if (i == ARRAY_SIZE(vmax_map)) {
+		map->vmax = vmax_map[i - 1].vmax;
+		map->gain = vmax_map[i - 1].gain;
+	}
+	if (map->vmax > aw_haptic->max_boost_vol)
+		map->vmax = aw_haptic->max_boost_vol;
+
+	return i;
+}
+#endif
 
 static void aw8692x_misc_para_init(struct aw_haptic *aw_haptic)
 {
@@ -2064,4 +2212,8 @@ struct aw_haptic_func aw8692x_func_list = {
 	.dump_rtp_regs = aw8692x_dump_rtp_regs,
 	.aw_test = aw8692x_test,
 	.check_qualify = aw8692x_check_qualify,
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	.parse_dt = aw8692x_parse_dt,
+	.convert_level_to_vmax = aw8692x_convert_level_to_vmax,
+#endif
 };

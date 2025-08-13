@@ -48,6 +48,25 @@ config OPLUS_SGM41512_CHARGER
 	help
 	  Say Y here to declare SGM41512 support
 
+config OPLUS_SC6607_CHARGER
+	bool "SC6607_CHARGER support"
+	help
+	  Say Y here to declare SC6607_CHARGER support
+
+config OPLUS_SC6607_CP
+	bool "SC6607_CP support"
+	help
+	  Say Y here to declare SC6607_CP support
+
+config OPLUS_SC6607_UFCS
+	bool "SC6607_UFCS support"
+	help
+	  Say Y here to declare SC6607_UFCS support
+config OPLUS_SY6974B_CHARGER
+	bool "SY6974B support"
+	help
+	  Say Y here to declare SY6974B support
+
 config OPLUS_PD_MANAGER_CHARGER
 	bool "PD_MANAGER support"
 	help
@@ -68,6 +87,16 @@ config OPLUS_MT6379_CHARGER
 	help
 	  Say Y here to declare PMIC MT6379 support
 
+config OPLUS_MT6789_CHARGER
+	bool "MTK6789 support"
+	help
+	  Say Y here to declare MTK6789 support
+
+config OPLUS_MT6835_CHARGER
+        bool "MTK6835 support"
+        help
+          Say Y here to declare MTK6835 support
+
 config OPLUS_GAUGE_BQ27Z561
 	bool "GAUGE BQ27Z561 support"
 	help
@@ -77,6 +106,11 @@ config OPLUS_GAUGE_NFG8011B
 	bool "GAUGE NFG8011B support"
 	help
 	  Say Y here to declare GAUGE NFG8011B support
+
+config OPLUS_GAUGE_CW2217B
+	bool "GAUGE CW2217B support"
+	help
+	  Say Y here to declare GAUGE CW2217B support
 
 config OPLUS_ADSP_SM8450_CHARGER
 	bool "SM8450 support"
@@ -256,4 +290,15 @@ config OPLUS_STATE_RETENTION
 	help
 	  Say Y here to declare state retention support
 
+config OPLUS_SEC_IC_SC5891
+        bool "encryption ic sc5891 support"
+        default n
+        help
+          Say Y here to declare encryption ic sc5891 support
+
 endif #OPLUS_CHG_VOOCPHY
+
+config OPLUS_LIQUID_DETECTION
+	bool "liquid detection support"
+	help
+	  Say Y here to declare liquid detection support

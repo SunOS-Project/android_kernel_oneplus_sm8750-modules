@@ -150,6 +150,7 @@
 #define HAPTIC_MAX_LEVEL						(2400)
 #define HAPTIC_OLD_TEST_LEVEL					(2550)
 #define HAPTIC_MAX_VBAT_SOC						(100)
+#define OPLUS_HAPTIC_MAX_VOL					(95)
 
 enum haptic_vibration_style {
 	HAPTIC_VIBRATION_CRISP_STYLE = 0,
@@ -233,15 +234,16 @@ typedef struct haptic_common_data {
 	unsigned int vbat_low_soc_cold;
 	int vbat_low_temp;
 	unsigned int vbat_low_vmax_level;
-	
+
 	struct work_struct  motor_old_test_work;
 	unsigned int motor_old_test_mode;
 	int gain;
 	uint32_t rtp_file_num;
 	uint32_t f0;
-	
+
 	int device_id;
 	bool livetap_support;
+	bool auto_break_mode_support;
 	void *chip_data;
 	int vibration_style;
 	struct oplus_haptic_operations *haptic_common_ops;
@@ -367,8 +369,7 @@ void haptic_set_ftm_wave(void);
 int common_haptic_data_free(struct haptic_common_data *pdata);
 const char* get_rtp_name(uint32_t id, uint32_t f0);
 const struct firmware *rtp_load_file_accord_f0(uint32_t rtp_file_num);
-int convert_level_to_vmax(struct vmax_map *map, int val);
-int haptic_get_f0(void);
+uint32_t haptic_common_get_f0(void);
 bool get_ringtone_support(uint32_t val);
 bool get_rtp_key_support(uint32_t val);
 uint8_t *get_rtp_key_data(uint32_t *haptic_rtp_key_data_len);

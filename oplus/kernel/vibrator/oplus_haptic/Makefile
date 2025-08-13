@@ -17,6 +17,7 @@ oplus_haptic-y += haptic_common/haptic_common_driver.o
 oplus_haptic-$(CONFIG_AW_HAPTIC) += aw_haptic/haptic_hv.o
 oplus_haptic-$(CONFIG_AW_HAPTIC) += aw_haptic/aw8692x.o
 oplus_haptic-$(CONFIG_AW_HAPTIC) += aw_haptic/aw869xx.o
+oplus_haptic-$(CONFIG_AW_HAPTIC) += aw_haptic/aw8693xs.o
 oplus_haptic-$(CONFIG_SIH_HAPTIC) += si_haptic/haptic.o
 oplus_haptic-$(CONFIG_SIH_HAPTIC) += si_haptic/sih688x_func_config.o
 oplus_haptic-$(CONFIG_SIH_HAPTIC) += si_haptic/haptic_mid.o

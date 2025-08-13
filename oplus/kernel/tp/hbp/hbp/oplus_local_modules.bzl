@@ -52,16 +52,17 @@ def define_oplus_local_modules():
     )
 
     define_oplus_ddk_module(
-        name = "oplus_synaptics_tcm2",
+        name = "oplus_bsp_tp_hbp_syna_s3910",
         srcs = native.glob([
             "**/*.h",
-            "chips/synaptics/synaptics_tcm2/syna_tcm2.c",
-            "chips/synaptics/synaptics_tcm2/tcm/synaptics_touchcom_core_v1.c",
-            "chips/synaptics/synaptics_tcm2/tcm/synaptics_touchcom_core_v2.c",
-            "chips/synaptics/synaptics_tcm2/tcm/synaptics_touchcom_func_base.c",
-            "chips/synaptics/synaptics_tcm2/tcm/synaptics_touchcom_func_touch.c",
-            "chips/synaptics/synaptics_tcm2/tcm/synaptics_touchcom_func_reflash.c",
-            "chips/synaptics/synaptics_tcm2/tcm/synaptics_touchcom_func_romboot.c",
+            "chips/synaptics/s3910/syna_tcm2.c",
+            "chips/synaptics/s3910/syna_tcm2_sysfs.c",
+            "chips/synaptics/s3910/tcm/synaptics_touchcom_core_v1.c",
+            "chips/synaptics/s3910/tcm/synaptics_touchcom_core_v2.c",
+            "chips/synaptics/s3910/tcm/synaptics_touchcom_func_base.c",
+            "chips/synaptics/s3910/tcm/synaptics_touchcom_func_touch.c",
+            "chips/synaptics/s3910/tcm/synaptics_touchcom_func_reflash.c",
+            "chips/synaptics/s3910/tcm/synaptics_touchcom_func_romboot.c",
         ]),
         includes = ["."],
         ko_deps = [
@@ -90,6 +91,6 @@ def define_oplus_local_modules():
         module_list = [
             "oplus_hbp_core",
             "oplus_ft3683g",
-            "oplus_synaptics_tcm2"
+            "oplus_bsp_tp_hbp_syna_s3910"
         ],
     )

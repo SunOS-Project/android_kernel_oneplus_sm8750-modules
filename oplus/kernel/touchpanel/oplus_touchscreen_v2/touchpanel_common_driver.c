@@ -2277,6 +2277,11 @@ static void init_panel_config(struct device *dev, struct touchpanel_data *ts)
 	ts->disable_suspend_irq_handler = of_property_read_bool(chip_np, "disable_suspend_irq_handler_support");
 	ts->tp_data_record_support = of_property_read_bool(chip_np, "tp_data_record_support");
 
+	/* glove_mode_v2_support */
+	if (!ts->glove_mode_v2_support) {
+		ts->glove_mode_v2_support = of_property_read_bool(chip_np, "glove_mode_v2_support");
+	}
+
 	/* interrupt mode*/
 	ts->int_mode = BANNABLE;
 	rc = of_property_read_u32(chip_np, "touchpanel,int-mode", &val);
@@ -2365,6 +2370,8 @@ static int init_parse_dts(struct device *dev, struct touchpanel_data *ts)
 					      "fingerprint_underscreen_support");
 	ts->fingerprint_not_report_in_suspend = of_property_read_bool(np,
 					      "fingerprint_not_report_in_suspend");
+	ts->fingerprint_error_report_support = of_property_read_bool(np,
+					      "fingerprint_error_report_support");
 	ts->suspend_gesture_cfg   = of_property_read_bool(np, "suspend_gesture_cfg");
 	ts->auto_test_force_pass_support = of_property_read_bool(np,
 					   "auto_test_force_pass_support");
@@ -3610,12 +3617,12 @@ static void tp_delta_read_triggered_by_key_handle(struct work_struct *work)
 	struct touchpanel_data *ts = container_of(work, struct touchpanel_data,
 				key_trigger_work);
 
+	if (!ts)
+		return;
+
 	TP_INFO(ts->tp_index, "%s:tp_debug= %d\n", __func__, tp_debug);
 
 	if (tp_debug != 2)
-		return;
-
-	if (!ts)
 		return;
 
 	touchpanel_trusted_touch_completion(ts);

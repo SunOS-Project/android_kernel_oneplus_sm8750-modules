@@ -2577,14 +2577,17 @@ static int oplus_voocphy_get_ichg_devation(struct oplus_voocphy_manager *chip)
 		cp_ibus_devation = slave_cp_ibus - main_cp_ibus;
 	}
 
-	voocphy_info("cp ibus devation = %d\n", cp_ibus_devation);
+	voocphy_info("cp main_cp_ibus = %d, slave_cp_ibus = %d, ibus devation = %d\n",
+		      main_cp_ibus, slave_cp_ibus, cp_ibus_devation);
 
 	return cp_ibus_devation;
 }
 
+#define OPLUS_VOOCPHY_SLAVE_CHECK_DELAY_MS              300
+#define OPLUS_VOOCPHY_SLAVE_STATUS_CHECK_DELAY_MS       50
+#define OPLUS_VOOCPHY_SLAVE_STATUS_CHECK_MAX_COUNT      60
 static bool oplus_voocphy_check_slave_cp_status(struct oplus_voocphy_manager *chip)
 {
-	int count = 0;
 	int i;
 	u8 slave_cp_status = 0;
 
@@ -2592,25 +2595,29 @@ static bool oplus_voocphy_check_slave_cp_status(struct oplus_voocphy_manager *ch
 		return false;
 
 	if (chip->slave_ops && chip->slave_ops->get_cp_status) {
-		for (i=0; i<3; i++) {
+		for (i = 0; i < OPLUS_VOOCPHY_SLAVE_STATUS_CHECK_MAX_COUNT; i++) {
 			oplus_voocphy_slave_get_chg_enable(chip, &slave_cp_status);
 			if (oplus_voocphy_get_slave_ichg(chip) < g_voocphy_chip->slave_cp_enable_thr_low ||
 			    chip->slave_ops->get_cp_status(chip) == 0 ||
 			    oplus_voocphy_get_ichg_devation(chip) > chip->cp_ibus_devation) {
-				count = count + 1;
+				voocphy_err("slave cp ichg=%d mA, status:%d, devation:%d, cp_ibus_devation:%d count:%d!\n",
+					    oplus_voocphy_get_slave_ichg(chip),
+					    chip->slave_ops->get_cp_status(chip),
+					    oplus_voocphy_get_ichg_devation(chip),
+					    chip->cp_ibus_devation,
+					    i);
+				if (oplus_chglib_is_wired_present(chip->dev) == false) {
+					voocphy_err("offline!!\n");
+					return false;
+				}
 			} else {
-				count = 0;
+				voocphy_err("slave cp is not in trouble!\n");
+				return true;
 			}
-			msleep(10);
+			msleep(OPLUS_VOOCPHY_SLAVE_STATUS_CHECK_DELAY_MS);
 		}
-
-		if (count >= 3) {
-			voocphy_err("count >= 3, return false, slave cp is in trouble!\n");
-			return false;
-		} else {
-			voocphy_err("count < 3, return true, slave cp is not in trouble!\n");
-			return true;
-		}
+		voocphy_err("slave cp is in trouble!\n");
+		return false;
 	} else {
 		voocphy_err("slave cp don't exist, return false!\n");
 		return false;
@@ -5034,7 +5041,7 @@ static int oplus_voocphy_curr_event_handle(struct device *dev, unsigned long dat
 			}
 			voocphy_info("chip->cp_vbus = %d chip->cp_vbat = %d!!!!!\n", chip->cp_vbus, chip->cp_vbat);
 			oplus_voocphy_slave_set_chg_enable(chip, true);
-			msleep(200);
+			msleep(OPLUS_VOOCPHY_SLAVE_CHECK_DELAY_MS);
 			if (oplus_voocphy_check_slave_cp_status(chip)) {
 				voocphy_err("slave cp is normal, then set current!\n");
 			} else {

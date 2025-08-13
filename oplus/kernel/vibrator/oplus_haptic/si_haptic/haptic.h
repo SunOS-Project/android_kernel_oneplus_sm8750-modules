@@ -370,6 +370,9 @@ typedef struct haptic_func {
 	ssize_t (*get_cont_para)(sih_haptic_t *, uint8_t, char *);
 	bool (*if_chip_is_detect_done)(sih_haptic_t *);
 	void (*check_detect_state)(sih_haptic_t *, uint8_t);
+	void (*parse_dt)(struct device *, sih_haptic_t *,
+		struct device_node *);
+	int (*convert_level_to_vmax)(sih_haptic_t *, struct vmax_map *, int);
 } haptic_func_t;
 
 typedef struct sih_haptic_ptr {

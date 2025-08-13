@@ -166,6 +166,8 @@ static int sih_interface_init(haptic_common_data_t *oh)
 {
 	int ret = -1;
 	sih_haptic_t *sih_haptic = (sih_haptic_t *)oh->chip_data;
+	struct i2c_client *i2c = sih_haptic->i2c;
+	struct device_node *np = i2c->dev.of_node;
 	/* keep gpio resource*/
 	sih_haptic->pinctrl = oh->pinctrl;
 	sih_haptic->pinctrl_state = oh->pinctrl_state;
@@ -173,7 +175,7 @@ static int sih_interface_init(haptic_common_data_t *oh)
 	sih_haptic->chip_attr.irq_gpio = oh->irq_gpio;
 	sih_haptic->device_id = oh->device_id;
 	sih_haptic->livetap_support = oh->livetap_support;
-	sih_haptic->chip_ipara.drv_vboost = oh->max_boost_vol;
+	sih_haptic->auto_break_mode_support = oh->auto_break_mode_support;
 	sih_haptic->vbat_low_vmax_level = oh->vbat_low_vmax_level;
 	sih_hardware_reset(sih_haptic);
 
@@ -190,6 +192,9 @@ static int sih_interface_init(haptic_common_data_t *oh)
 		hp_err("%s:register regmap failed\n", __func__);
 		return -EINVAL;
 	}
+
+	if (sih_haptic->hp_func->parse_dt)
+		sih_haptic->hp_func->parse_dt(&i2c->dev, sih_haptic, np);
 	return 0;
 
 }
@@ -390,8 +395,6 @@ static void sih_rtp_local_work(sih_haptic_t *sih_haptic, uint8_t mode)
 	memcpy(sih_haptic->rtp.rtp_cont->data, rtp_file->data, rtp_file->size);
 	release_firmware(rtp_file);
 
-	hp_info("%s:rtp len is %d\n", __func__, sih_haptic->rtp.rtp_cont->len);
-
 	mutex_lock(&sih_haptic->lock);
 	sih_haptic->rtp.rtp_init = true;
 	sih_haptic->chip_ipara.state = SIH_ACTIVE_MODE;
@@ -558,7 +561,7 @@ static int ram_update(sih_haptic_t *sih_haptic)
 	hp_info("%s:enter\n", __func__);
 
 	sih_haptic->ram.ram_init = false;
-	sih_haptic->detect.tracking_f0 = haptic_get_f0();
+	sih_haptic->detect.tracking_f0 = haptic_common_get_f0();
 
 	hp_info("%s: haptic_real_f0 [%d]\n", __func__, (sih_haptic->detect.tracking_f0 / 10));
 	if (DEVICE_ID_0815 == sih_haptic->device_id || DEVICE_ID_0809 == sih_haptic->device_id) {
@@ -1046,7 +1049,6 @@ static ssize_t sih_rtp_store(void *chip_data, const char *buf, uint32_t val)
 {
 	sih_haptic_t *sih_haptic = chip_data;
 	int rtp_is_going_on = 0;
-	unsigned long audio_delay = 0;
 
 	mutex_lock(&sih_haptic->lock);
 
@@ -1080,7 +1082,6 @@ static ssize_t sih_rtp_store(void *chip_data, const char *buf, uint32_t val)
 	if (val == AUDIO_READY_STATUS && sih_haptic->rtp.pre_haptic_number) {
 		hp_err("%s:pre_haptic_num:%d\n", __func__, sih_haptic->rtp.pre_haptic_number);
 		val = sih_haptic->rtp.pre_haptic_number;
-		audio_delay = sih_haptic->rtp.audio_delay;
 	}
 
 	sih_op_clean_status(sih_haptic);
@@ -1572,7 +1573,7 @@ static ssize_t sih_vmax_store(void *chip_data, const char *buf, uint32_t val)
 	if (val <= HAPTIC_MAX_GAIN) {
 		sih_haptic->chip_ipara.gain = (val * HAPTIC_RAM_VBAT_COMP_GAIN) / HAPTIC_MAX_GAIN;
 	} else if (val <= HAPTIC_MAX_LEVEL) {
-		convert_level_to_vmax(&map, val);
+		sih_haptic->hp_func->convert_level_to_vmax(sih_haptic, &map, val);
 		sih_haptic->chip_ipara.vmax = map.vmax;
 		sih_haptic->chip_ipara.gain = map.gain;
 	} else {
@@ -1590,7 +1591,7 @@ static ssize_t sih_vmax_store(void *chip_data, const char *buf, uint32_t val)
 	}
 
 	if (vbat_low_soc_flag() && (sih_haptic->vbat_low_vmax_level != 0) && (val > sih_haptic->vbat_low_vmax_level)) {
-		convert_level_to_vmax(&map, sih_haptic->vbat_low_vmax_level);
+		sih_haptic->hp_func->convert_level_to_vmax(sih_haptic, &map, sih_haptic->vbat_low_vmax_level);
 		sih_haptic->chip_ipara.vmax = map.vmax;
 		sih_haptic->chip_ipara.gain = map.gain;
 	}
@@ -2059,7 +2060,7 @@ static void sih_stream_mode(void *chip_data)
 	sih_haptic->stream_para.done_flag = false;
 	sih_haptic->stream_para.stream_mode = true;
 	if (vbat_low_soc_flag() && (sih_haptic->vbat_low_vmax_level != 0)) {
-		convert_level_to_vmax(&map, sih_haptic->vbat_low_vmax_level);
+		sih_haptic->hp_func->convert_level_to_vmax(sih_haptic, &map, sih_haptic->vbat_low_vmax_level);
 		sih_haptic->chip_ipara.vmax = map.vmax;
 		sih_haptic->chip_ipara.gain = map.gain;
 		hp_info("%s:vbat low, max_boost_vol 0x%x, vmax 0x%x\n",
@@ -2256,6 +2257,34 @@ struct oplus_haptic_operations si_haptic_ops = {
 	.haptic_mutex_unlock          = sih_mutex_unlock,
 };
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0))
+static ssize_t oplus_strlcpy(char *dst, const char *src, ssize_t siz) {
+	char *d = dst;
+	const char *s = src;
+	ssize_t n = siz;
+
+	/* Copy as many bytes as will fit */
+	if (n != 0) {
+		while (--n != 0) {
+			if ((*d++ = *s++) == '\0')
+				break;
+		}
+	}
+
+	/* Not enough room in dst, add NULL and traverse rest of src */
+	if (n == 0) {
+		if (siz != 0)
+			*d = '\0';			/* NULL-terminate dst */
+		while (*s++)
+			;
+	}
+
+	return (s - src - 1);		/* count does not include NUL */
+}
+#endif
+#endif
+
 static int sih_parse_dts(struct device *dev, sih_haptic_t *sih_haptic,
 	struct device_node *np)
 {
@@ -2272,11 +2301,13 @@ static int sih_parse_dts(struct device *dev, sih_haptic_t *sih_haptic,
 	if (ret) {
 		hp_err("%s:lra name acquire failed\n", __func__);
 	} else {
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0))
+		oplus_strlcpy(sih_haptic->chip_attr.lra_name, str, SIH_LRA_NAME_LEN);
+#else
 		strlcpy(sih_haptic->chip_attr.lra_name, str, SIH_LRA_NAME_LEN);
+#endif
 		hp_info("%s:lra_name = %s\n", __func__, sih_haptic->chip_attr.lra_name);
 	}
-	sih_haptic->auto_break_mode_support = of_property_read_bool(np, "oplus,auto_break_mode_support");
-	hp_info("oplus,auto_break_mode_support = %d\n", sih_haptic->auto_break_mode_support);
 
 	return 0;
 }

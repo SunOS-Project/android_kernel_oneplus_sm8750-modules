@@ -256,6 +256,22 @@ def define_oplus_local_modules():
     )
 
     define_oplus_ddk_module(
+        name = "oplus_bsp_tp_ft3419u",
+        srcs = native.glob([
+            "**/*.h",
+            "Focal/ft3419u/ft3419u_driver.c",
+            "Focal/ft3419u/ft3419u_test.c",
+        ]),
+        ko_deps = [
+            "//vendor/oplus/kernel/touchpanel/oplus_touchscreen_v2:oplus_bsp_tp_custom",
+            "//vendor/oplus/kernel/touchpanel/oplus_touchscreen_v2:oplus_bsp_tp_common",
+            "//vendor/oplus/kernel/touchpanel/oplus_touchscreen_v2:oplus_bsp_tp_focal_common",
+        ],
+        includes = ["."],
+#        local_defines = ["CONFIG_REMOVE_OPLUS_FUNCTION"],
+    )
+
+    define_oplus_ddk_module(
         name = "oplus_bsp_tp_ft8057p",
         srcs = native.glob([
             "**/*.h",
@@ -410,6 +426,7 @@ def define_oplus_local_modules():
             "oplus_bsp_tp_ft3681",
             "oplus_bsp_tp_ft3658u_spi",
             "oplus_bsp_tp_ft3518",
+            "oplus_bsp_tp_ft3419u",
             "oplus_bsp_tp_ft8057p",
             "oplus_bsp_tp_goodix_comnon",
             "oplus_bsp_tp_gt9966",

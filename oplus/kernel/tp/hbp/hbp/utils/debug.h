@@ -28,13 +28,16 @@ enum {
 	LOG_LEVEL_MAX
 };
 
-#define __hbp_printk(ftm, LEVEL, ...) \
-		printk("[T%d][touch-krn]["#LEVEL"][%s]" ftm, current->pid, __FUNCTION__,##__VA_ARGS__)
+#define __hbp_print_info(ftm, LEVEL, ...) \
+		pr_info("[T%d][touch-krn]["#LEVEL"][%s]" ftm, current->pid, __FUNCTION__,##__VA_ARGS__)
+
+#define __hbp_print_err(ftm, LEVEL, ...) \
+		pr_err("[T%d][touch-krn]["#LEVEL"][%s]" ftm, current->pid, __FUNCTION__,##__VA_ARGS__)
 
 #define hbp_err(ftm, ...) \
 	do { \
 		if (debug_level >= LOG_LEVEL_ERR) { \
-			__hbp_printk(ftm, ERROR, ##__VA_ARGS__); \
+			__hbp_print_err(ftm, ERROR, ##__VA_ARGS__); \
 		}\
 	} while(0)
 
@@ -42,7 +45,7 @@ enum {
 #if 0
 #define hbp_fatal(ftm, ...) \
 	do { \
-		__hbp_printk(ftm, FATAL, ##__VA_ARGS__); \
+		__hbp_print_err(ftm, FATAL, ##__VA_ARGS__); \
 		WARN_ON(1); \
 	} while(0)
 
@@ -53,21 +56,21 @@ enum {
 #define hbp_info(ftm, ...) \
 	do { \
 		if (debug_level >= LOG_LEVEL_INFO) { \
-			__hbp_printk(ftm, INFO, ##__VA_ARGS__); \
+			__hbp_print_info(ftm, INFO, ##__VA_ARGS__); \
 		} \
 	} while(0)
 
 #define hbp_warn(ftm, ...) \
 	do { \
 		if (debug_level >= LOG_LEVEL_WARN) { \
-			__hbp_printk(ftm, WARN, ##__VA_ARGS__); \
+			__hbp_print_info(ftm, WARN, ##__VA_ARGS__); \
 		} \
 	} while(0)
 
 #define hbp_debug(ftm, ...) \
 	do { \
 		if (debug_level >= LOG_LEVEL_DEBUG) { \
-			__hbp_printk(ftm, DEBUG, ##__VA_ARGS__); \
+			__hbp_print_info(ftm, DEBUG, ##__VA_ARGS__); \
 		} \
 	} while(0)
 

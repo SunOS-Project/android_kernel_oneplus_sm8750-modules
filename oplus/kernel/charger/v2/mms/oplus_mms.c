@@ -1088,6 +1088,14 @@ static void oplus_mms_msg_work(struct work_struct *work)
 	queue_delayed_work(mms_wq, &mms->msg_work, 0);
 }
 
+static void oplus_mms_callback_work(struct work_struct *work)
+{
+	struct oplus_mms *mms = container_of(work, struct oplus_mms,
+					callback_work);
+
+	oplus_mms_call(mms);
+}
+
 static int oplus_mms_match_device_by_name(struct device *dev, const void *data)
 {
 	const char *name = data;
@@ -1189,6 +1197,7 @@ __oplus_mms_register(struct device *parent, const struct oplus_mms_desc *desc,
 	}
 	INIT_DELAYED_WORK(&mms->update_work, oplus_mms_update_work);
 	INIT_DELAYED_WORK(&mms->msg_work, oplus_mms_msg_work);
+	INIT_WORK(&mms->callback_work, oplus_mms_callback_work);
 	INIT_LIST_HEAD(&mms->subscribe_list);
 	INIT_LIST_HEAD(&mms->msg_list);
 
@@ -1227,7 +1236,7 @@ __oplus_mms_register(struct device *parent, const struct oplus_mms_desc *desc,
 	kobject_uevent(&dev->kobj, KOBJ_CHANGE);
 
 	queue_delayed_work(mms_wq, &mms->update_work, 0);
-	oplus_mms_call(mms);
+	schedule_work(&mms->callback_work);
 
 	return mms;
 
@@ -1318,6 +1327,7 @@ void oplus_mms_unregister(struct oplus_mms *mms)
 	mms->removing = true;
 	cancel_delayed_work_sync(&mms->update_work);
 	cancel_delayed_work_sync(&mms->msg_work);
+	cancel_work_sync(&mms->callback_work);
 	sysfs_remove_link(&mms->dev.kobj, "powers");
 #ifdef CONFIG_OPLUS_CHG_MMS_DEBUG
 	if (!IS_ERR_OR_NULL(mms->debug_subs))

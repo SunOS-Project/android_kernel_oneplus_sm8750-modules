@@ -705,7 +705,7 @@ lra_reg_func_t func_list[] = {
 
 void sih_load_reg_config(sih_haptic_t *sih_haptic, uint8_t func_type)
 {
-	uint8_t i;
+	int i;
 	reg_format_t *reg_list = NULL;
 
 	for (i = 0; i < sizeof(func_list) / sizeof(lra_reg_func_t); i++) {

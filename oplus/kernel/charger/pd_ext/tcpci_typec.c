@@ -2915,6 +2915,11 @@ int tcpc_typec_init(struct tcpc_device *tcpc, uint8_t typec_role)
 #endif	/* CONFIG_TYPEC_POWER_CTRL_INIT */
 
 	typec_unattached_entry(tcpc);
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	/* oplus add for cc toggle */
+	tcpci_notify_wd0_state(tcpc, false);
+#endif
 	return ret;
 }
 

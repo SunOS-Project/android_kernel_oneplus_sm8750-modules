@@ -102,6 +102,11 @@ struct charger_data;
 
 #define MAX_ALG_NO 10
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+#define SUPPORT_PARAMETER_SIZE 8
+#define SUPPORT_TABLE_SIZE 360
+#endif
+
 enum bat_temp_state_enum {
 	BAT_TEMP_LOW = 0,
 	BAT_TEMP_NORMAL,
@@ -300,6 +305,17 @@ struct ntc_temp{
 	int i_table_size;
 };
 
+struct ntc_temp_parameters {
+	int parameters_support;
+	int table_support;
+	int i_tap_over_critical_low;
+	int i_rap_pull_up_r;
+	int i_rap_pull_up_voltage;
+	int i_tap_min;
+	int i_tap_max;
+	unsigned int i_25c_volt;
+};
+
 struct oplus_custom_gpio_pinctrl {
 	int vchg_trig_gpio;
 	int ccdetect_gpio;
@@ -348,6 +364,8 @@ struct mtk_charger {
 	struct oplus_mms *gauge_topic;
 	struct oplus_mms  *err_topic;
 	int low_batt_otg_boost_curr_ua;
+	struct ntc_temp_parameters subboard_parameters;
+	struct temp_param *support_subboard_table;
 #endif
 
 	struct platform_device *pdev;
@@ -540,6 +558,7 @@ struct mtk_charger {
 	bool cp_btb_temp_share;
 	bool support_subboard_ntc;
 	bool pd_svooc;
+	int sub_board_pull_up_r;
 
 	struct tcpc_device *tcpc;
 	struct adapter_power_cap srccap;

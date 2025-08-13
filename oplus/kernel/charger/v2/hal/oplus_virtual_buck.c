@@ -507,6 +507,10 @@ static int oplus_vc_ship_gpio_init(struct oplus_virtual_buck_ic *chip)
 	int rc;
 
 	chip->misc_gpio.pinctrl = devm_pinctrl_get(chip->dev);
+	if (IS_ERR_OR_NULL(chip->misc_gpio.pinctrl)) {
+		chg_err("get pinctrl fail\n");
+		return -EPROBE_DEFER;
+	}
 
 	chip->misc_gpio.ship_active = pinctrl_lookup_state(chip->misc_gpio.pinctrl, "ship_active");
 	if (IS_ERR_OR_NULL(chip->misc_gpio.ship_active)) {
@@ -530,6 +534,12 @@ static int oplus_vc_ship_gpio_init(struct oplus_virtual_buck_ic *chip)
 static int oplus_vc_ccdetect_gpio_init(struct oplus_virtual_buck_ic *chip)
 {
 	int rc;
+
+	chip->misc_gpio.pinctrl = devm_pinctrl_get(chip->dev);
+	if (IS_ERR_OR_NULL(chip->misc_gpio.pinctrl)) {
+		chg_err("get pinctrl fail\n");
+		return -EPROBE_DEFER;
+	}
 
 	chip->misc_gpio.ccdetect_active = pinctrl_lookup_state(
 		chip->misc_gpio.pinctrl, "ccdetect_active");
@@ -2199,6 +2209,7 @@ static int oplus_chg_vb_set_pd_config(struct oplus_chg_ic_dev *ic_dev, u32 pdo)
 	struct oplus_virtual_buck_ic *vb;
 	int i;
 	int rc = 0;
+	int status = -ENOTSUPP;
 
 	if (ic_dev == NULL) {
 		chg_err("oplus_chg_ic_dev is NULL");
@@ -2215,13 +2226,17 @@ static int oplus_chg_vb_set_pd_config(struct oplus_chg_ic_dev *ic_dev, u32 pdo)
 			vb->child_list[i].ic_dev,
 			OPLUS_IC_FUNC_BUCK_SET_PD_CONFIG,
 			pdo);
-		if (rc < 0)
+		if (rc < 0) {
 			chg_err("child ic[%d] set pdo(=0x%08x) error, rc=%d\n", i, pdo, rc);
-		else
-			return 0;
+			return rc;
+		} else {
+			status = 0;
+		}
 	}
-
-	return rc;
+	if (status == -ENOTSUPP && rc == -ENOTSUPP)
+		return rc;
+	else
+		return 0;
 }
 
 static int oplus_chg_vb_wls_boost_enable(struct oplus_chg_ic_dev *ic_dev, bool en)
@@ -4202,6 +4217,68 @@ static int oplus_chg_vb_get_usb_aicl_enhance(struct oplus_chg_ic_dev *ic_dev, bo
 	return rc;
 }
 
+static int oplus_chg_vb_get_lpd_info(struct oplus_chg_ic_dev *ic_dev, u32 *buffer, u32 flag)
+{
+	struct oplus_virtual_buck_ic *vb;
+	int i;
+	int rc = 0;
+
+	if (ic_dev == NULL || buffer == NULL) {
+		chg_err("oplus_chg_ic_dev is NULL");
+		return -ENODEV;
+	}
+
+	vb = oplus_chg_ic_get_drvdata(ic_dev);
+
+	for (i = 0; i < vb->child_num; i++) {
+		if (!func_is_support(&vb->child_list[i], OPLUS_IC_FUNC_BUCK_GET_LPD_INFO)) {
+			rc = -ENOTSUPP;
+			continue;
+		}
+		rc = oplus_chg_ic_func(
+			vb->child_list[i].ic_dev,
+			OPLUS_IC_FUNC_BUCK_GET_LPD_INFO,
+			buffer, flag);
+		if (rc < 0)
+			chg_err("child ic[%d] get lpd info error, rc=%d\n", i, rc);
+		else
+			return 0;
+	}
+
+	return rc;
+}
+
+int oplus_chg_vb_set_flash_mode(struct oplus_chg_ic_dev *ic_dev, bool flash_mode)
+{
+	struct oplus_virtual_buck_ic *vb;
+	int i;
+	int rc = 0;
+
+	if (ic_dev == NULL) {
+		chg_err("oplus_chg_ic_dev is NULL");
+		return -ENODEV;
+	}
+
+	vb = oplus_chg_ic_get_drvdata(ic_dev);
+
+	for (i = 0; i < vb->child_num; i++) {
+		if (!func_is_support(&vb->child_list[i], OPLUS_IC_FUNC_BUCK_SET_FLASH_MODE)) {
+			rc = -ENOTSUPP;
+			continue;
+		}
+		rc = oplus_chg_ic_func(
+			vb->child_list[i].ic_dev,
+			OPLUS_IC_FUNC_BUCK_SET_FLASH_MODE,
+			flash_mode);
+		if (rc < 0)
+			chg_err("child ic[%d] set flash mode error, rc=%d\n", i, rc);
+		else
+			return 0;
+	}
+
+	return rc;
+}
+
 static void *oplus_chg_vb_get_func(struct oplus_chg_ic_dev *ic_dev, enum oplus_chg_ic_func func_id)
 {
 	void *func = NULL;
@@ -4466,6 +4543,12 @@ static void *oplus_chg_vb_get_func(struct oplus_chg_ic_dev *ic_dev, enum oplus_c
 		break;
 	case OPLUS_IC_FUNC_BUCK_GET_USB_AICL_ENHANCE:
 		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_BUCK_GET_USB_AICL_ENHANCE, oplus_chg_vb_get_usb_aicl_enhance);
+		break;
+	case OPLUS_IC_FUNC_BUCK_GET_LPD_INFO:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_BUCK_GET_LPD_INFO, oplus_chg_vb_get_lpd_info);
+		break;
+	case OPLUS_IC_FUNC_BUCK_SET_FLASH_MODE:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_BUCK_SET_FLASH_MODE, oplus_chg_vb_set_flash_mode);
 		break;
 	default:
 		chg_err("this func(=%d) is not supported\n", func_id);

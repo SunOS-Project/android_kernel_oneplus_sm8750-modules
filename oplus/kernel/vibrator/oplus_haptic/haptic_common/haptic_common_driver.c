@@ -33,7 +33,7 @@
 #include "haptic_hv_rtp_key_data.h"
 
 #ifdef OPLUS_FEATURE_CHG_BASIC
-#include <soc/oplus/system/boot_mode.h>
+#include <soc/oplus/boot/boot_mode.h>
 #ifdef CONFIG_OPLUS_CHARGER_MTK
 #include <mt-plat/mtk_boot_common.h>
 #endif
@@ -44,28 +44,7 @@
 
 typedef struct led_classdev cdev_t;
 haptic_common_data_t *g_oh;
-static uint8_t OPLUS_HAPTIC_MAX_VOL = 95;
 DEFINE_MUTEX(rst_mutex);
-
-static struct vmax_map vmax_map[] = {
-	{800,  0x28, 0x40},//6.0V
-	{900,  0x28, 0x49},
-	{1000, 0x28, 0x51},
-	{1100, 0x28, 0x5A},
-	{1200, 0x28, 0x62},
-	{1300, 0x28, 0x6B},
-	{1400, 0x28, 0x73},
-	{1500, 0x28, 0x7C},
-	{1600, 0x2A, 0x80},//6.142
-	{1700, 0x31, 0x80},//6.568
-	{1800, 0x38, 0x80},//6.994
-	{1900, 0x3F, 0x80},//7.42
-	{2000, 0x46, 0x80},//7.846
-	{2100, 0x4C, 0x80},//8.272
-	{2200, 0x51, 0x80},//8.556
-	{2300, 0x58, 0x80},//8.982
-	{2400, 0x5E, 0x80},//9.408
-};
 
 static inline void *haptic_kzalloc(size_t size, gfp_t flags)
 {
@@ -87,12 +66,6 @@ struct haptic_common_data *common_haptic_data_alloc(void)
 
 static int init_parse_dts(struct device *dev, struct haptic_common_data *oh,struct device_node *np)
 {
-	int ret = -1;
-	int i = 0;
-	uint32_t max_boost_voltage = 0;
-	uint8_t vmax[VMAX_GAIN_NUM];
-	uint8_t gain[VMAX_GAIN_NUM];
-
 	if (np == NULL) {
 		oh_err("%s:haptic device node acquire failed\n", __func__);
 		return -EINVAL;
@@ -139,31 +112,8 @@ static int init_parse_dts(struct device *dev, struct haptic_common_data *oh,stru
 	oh->livetap_support = of_property_read_bool(np, "oplus,livetap_support");
 	oh_info("%s: oplus,livetap_support = %d\n", __func__, oh->livetap_support);
 
-	if (of_property_read_u32(np, "oplus,max_boost_voltage", &max_boost_voltage))
-		oh->max_boost_vol = DEFAULT_BOOST_VOLT;
-	else
-		oh->max_boost_vol = (uint8_t)max_boost_voltage;
-	oh_err("%s: boost_voltage=%d, max_boost_voltage:%d\n", __func__, oh->max_boost_vol, max_boost_voltage);
-
-	ret = of_property_read_u8_array(np, "haptic_hv_vmax", vmax, ARRAY_SIZE(vmax));
-	if (ret != 0) {
-		oh_info("%s: haptic_hv_vmax not found", __func__);
-	} else {
-		for (i = 0; i < ARRAY_SIZE(vmax); i++) {
-			vmax_map[i].vmax = vmax[i];
-			oh_info("%s: vmax_map vmax: %d vmax: %d\n", __func__, vmax_map[i].vmax, vmax[i]);
-		}
-	}
-
-	ret = of_property_read_u8_array(np, "haptic_hv_gain", gain, ARRAY_SIZE(gain));
-	if (ret != 0) {
-		oh_info("%s: haptic_hv_gain not found\n", __func__);
-	} else {
-		for (i = 0; i < ARRAY_SIZE(gain); i++) {
-			vmax_map[i].gain = gain[i];
-			oh_info("%s: vmax_map gain: 0x%x gain: 0x%x\n", __func__, vmax_map[i].gain, gain[i]);
-		}
-	}
+	oh->auto_break_mode_support = of_property_read_bool(np, "oplus,auto_break_mode_support");
+	oh_info("oplus,auto_break_mode_support = %d\n", oh->auto_break_mode_support);
 
 	if (of_property_read_u32(np, "oplus,vbat_low_soc", &oh->vbat_low_soc)) {
 		oh_info("vbat_low_soc not found");
@@ -201,8 +151,13 @@ static int haptic_acquire_gpio_res(struct device *dev,struct haptic_common_data 
 {
 	int ret = -1;
 	if (gpio_is_valid(oh->irq_gpio)) {
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0))
+		ret = devm_gpio_request_one(dev, oh->irq_gpio,
+			GPIOF_IN, "haptic_irq");
+#else
 		ret = devm_gpio_request_one(dev, oh->irq_gpio,
 			GPIOF_DIR_IN, "haptic_irq");
+#endif
 		if (ret) {
 			oh_err("%s:irq gpio request failed,ret = %d\n", __func__,ret);
 			return ret;
@@ -313,7 +268,7 @@ static ssize_t f0_store(struct device *dev,
 	oh_info("%s: f0 = %d\n", __func__, val);
 
 	oh->f0 = val;
-	val = haptic_get_f0();
+	val = haptic_common_get_f0();
 	oh->haptic_common_ops->f0_store(oh->chip_data,buf,val);
     return count;
 }
@@ -1376,7 +1331,10 @@ static int haptic_file_mmap(struct file *filp, struct vm_area_struct *vma)
 	int ret = -1;
 #if LINUX_VERSION_CODE > KERNEL_VERSION(4, 7, 0)
 	/* only accept PROT_READ, PROT_WRITE and MAP_SHARED from the API of mmap */
-#if LINUX_VERSION_CODE > KERNEL_VERSION(6, 6, 0)
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0))
+	vm_flags_t vm_flags = calc_vm_prot_bits(PROT_READ|PROT_WRITE, 0) |
+		calc_vm_flag_bits(filp, MAP_SHARED);
+#elif (LINUX_VERSION_CODE > KERNEL_VERSION(6, 6, 0))
 	vm_flags_t vm_flags = calc_vm_prot_bits(PROT_READ|PROT_WRITE, 0) |
 		VM_SHARED;
 #else
@@ -1434,7 +1392,7 @@ static long haptic_file_unlocked_ioctl(struct file *filp,
 {
 	haptic_common_data_t *oh = (haptic_common_data_t *)filp->private_data;
 	uint32_t tmp;
-	int ret = -1;
+	int ret = 0;
 
 	if (!oh) {
 		oh_err("%s: oh is null\n", __func__);
@@ -1489,7 +1447,7 @@ static long haptic_file_unlocked_ioctl(struct file *filp,
 	}
 	oh_info("%s:mutex_unlock here!\n", __func__);
 	oh->haptic_common_ops->haptic_mutex_unlock(oh->chip_data);
-	return 0;
+	return ret;
 }
 
 static const struct file_operations fops = {
@@ -2127,26 +2085,6 @@ const char* get_rtp_name(uint32_t id, uint32_t f0) {
 	return rtp_name;
 }
 
-int convert_level_to_vmax(struct vmax_map *map, int val)
-{
-	int i;
-	for (i = 0; i < ARRAY_SIZE(vmax_map); i++) {
-		if (val == vmax_map[i].level) {
-			map->vmax = vmax_map[i].vmax;
-			map->gain = vmax_map[i].gain;
-			break;
-		}
-	}
-	if (i == ARRAY_SIZE(vmax_map)) {
-		map->vmax = vmax_map[i - 1].vmax;
-		map->gain = vmax_map[i - 1].gain;
-	}
-	if (map->vmax > OPLUS_HAPTIC_MAX_VOL)
-		map->gain = OPLUS_HAPTIC_MAX_VOL;
-
-	return i;
-}
-
 void haptic_set_ftm_wave(void)
 {
 	if (!g_oh) {
@@ -2287,31 +2225,22 @@ const struct firmware *rtp_load_file_accord_f0(uint32_t rtp_file_num)
 	return NULL;
 }
 
-int haptic_get_f0(void)
+uint32_t haptic_common_get_f0(void)
 {
 	uint32_t tmp_f0;
+
 	if (!g_oh) {
 		oh_err("%s: g_oh is null\n", __func__);
 		return 0;
 	}
-	if (g_oh->haptic_common_ops == NULL || g_oh->chip_data == NULL) {
-		oh_err("%s: haptic_common_ops or chip_data is NULL\n", __func__);
-		return 0;
-	}
-	if (!g_oh->haptic_common_ops->haptic_get_f0) {
-		oh_err("%s: haptic_get_f0 is null\n", __func__);
-		return 0;
-	}
-	tmp_f0 = g_oh->haptic_common_ops->haptic_get_f0(g_oh->chip_data);
-	if ((g_oh->device_id == DEVICE_ID_0815) ||
-		(g_oh->device_id == DEVICE_ID_0809)) {
+
+	tmp_f0 = g_oh->f0;
+	if ((g_oh->device_id == DEVICE_ID_0815) || (g_oh->device_id == DEVICE_ID_0809)) {
 		if (tmp_f0 < F0_VAL_MIN_0815 || tmp_f0 > F0_VAL_MAX_0815)
 			g_oh->f0 = 1700;
-
 	} else if (g_oh->device_id == DEVICE_ID_81538) {
 		if (tmp_f0 < F0_VAL_MIN_081538 || tmp_f0 > F0_VAL_MAX_081538)
 			g_oh->f0 = 1500;
-
 	} else if (g_oh->device_id == DEVICE_ID_0832) {
 		if (tmp_f0 < F0_VAL_MIN_0832 || tmp_f0 > F0_VAL_MAX_0832)
 			g_oh->f0 = 2350;
@@ -2322,6 +2251,7 @@ int haptic_get_f0(void)
 		if (tmp_f0 < F0_VAL_MIN_0833 || tmp_f0 > F0_VAL_MAX_0833)
 			g_oh->f0 = 2350;
 	}
+
 	return g_oh->f0;
 }
 

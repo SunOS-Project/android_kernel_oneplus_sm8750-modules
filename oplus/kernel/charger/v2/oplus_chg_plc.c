@@ -2303,6 +2303,7 @@ static int oplus_chg_plc_probe(struct platform_device *pdev)
 	rc = oplus_plc_topic_init(chip);
 	if (rc < 0)
 		goto topic_reg_err;
+	spin_lock_init(&chip->protocol_list_lock);
 	chip->buck_opp = oplus_plc_register_protocol(chip->plc_topic,
 		&g_plc_protocol_desc, chip->dev->of_node, chip);
 	if (chip->buck_opp == NULL)
@@ -2314,7 +2315,6 @@ static int oplus_chg_plc_probe(struct platform_device *pdev)
 	INIT_WORK(&chip->chg_mode_change_work, oplus_plc_chg_mode_change_work);
 	INIT_WORK(&chip->wired_online_work, oplus_plc_wired_online_work);
 	mutex_init(&chip->status_control_lock);
-	spin_lock_init(&chip->protocol_list_lock);
 
 	return 0;
 

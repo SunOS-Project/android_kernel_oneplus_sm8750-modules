@@ -211,8 +211,6 @@ static int bq27z561_sealed(struct chip_bq27z561 *chip)
 static int bq27z561_i2c_deep_int(struct chip_bq27z561 *chip)
 {
 	int rc = 0;
-	u8 seal_cmd_1[2] = { 0x14, 0x04 };
-	u8 seal_cmd_2[2] = { 0x72, 0x36 };
 	int retry = 5;
 
 	if (!chip)
@@ -222,16 +220,20 @@ static int bq27z561_i2c_deep_int(struct chip_bq27z561 *chip)
 		/* need to delay 2s before write 0x0414, delay 1s before write 0x3672
 		 * make sure unseal Success rate
 		 */
-		usleep_range(2000000, 2000000);
-		bq27z561_write_i2c_block(chip, BQ28Z610_REG_CNTL1, 2, seal_cmd_1);
+		mutex_lock(&chip->chip_mutex);
+		i2c_smbus_write_word_data(chip->client, BQ28Z610_REG_CNTL1, BQ28Z610_UNSEAL_SUBCMD1);
 		usleep_range(1000000, 1000000);
-		bq27z561_write_i2c_block(chip, BQ28Z610_REG_CNTL1, 2, seal_cmd_2);
+		i2c_smbus_write_word_data(chip->client, BQ28Z610_REG_CNTL1, BQ28Z610_UNSEAL_SUBCMD2);
+		mutex_unlock(&chip->chip_mutex);
 
 		rc = bq27z561_sealed(chip);
-		if (rc == 1)
+		if (rc == 1) {
 			retry = 0;
-		else
+		} else {
 			retry--;
+			usleep_range(2000000, 2000000);
+			chg_info("bq27z561_unseal retry:%d, rc:%d\n", retry, rc);
+		}
 	} while (retry > 0);
 	chg_info("bq27z561_unseal flag [%d]\n", rc);
 

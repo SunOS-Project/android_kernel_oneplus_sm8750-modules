@@ -41,7 +41,8 @@ static void qcom_panel_event_callback(enum panel_event_notifier_tag tag,
 		}
 	}
 
-	if (notify->notif_type == DRM_PANEL_EVENT_BLANK) {
+	if (notify->notif_type == DRM_PANEL_EVENT_BLANK
+			|| notify->notif_type ==  DRM_PANEL_EVENT_BLANK_LP) {
 		if (notify->notif_data.early_trigger) {
 			event = HBP_PANEL_EVENT_EARLY_SUSPEND;
 		} else {

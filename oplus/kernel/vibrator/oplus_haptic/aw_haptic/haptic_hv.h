@@ -30,6 +30,8 @@
 #define AW86926_CHIPID								(0x9260)
 #define AW86927_CHIPID								(0x9270)
 #define AW86928_CHIPID								(0x9280)
+#define AW86937S_CHIPID								(0x9371)
+#define AW86938S_CHIPID								(0x9381)
 
 /*********************************************************
  *
@@ -43,6 +45,7 @@
 #define AW_READ_CHIPID_RETRIES						(5)
 #define AW_READ_CHIPID_RETRY_DELAY					(2)
 #define AW_SEQUENCER_SIZE							(8)
+#define AW_I2C_READ_MSG_NUM							(2)
 #define AW_I2C_BYTE_ONE								(1)
 #define AW_I2C_BYTE_TWO								(2)
 #define AW_I2C_BYTE_THREE							(3)
@@ -53,9 +56,12 @@
 #define AW_I2C_BYTE_EIGHT							(8)
 
 #define AW_SEQUENCER_LOOP_SIZE						(4)
+#define AW_RAM_GET_F0_SEQ							(5)
 #define AW_RTP_NAME_MAX								(64)
 #define AW_PM_QOS_VALUE_VB							(400)
+#define AW_DRV2_LVL_MAX								(0x7F)
 #define AW_VBAT_REFER								(4200)
+#define AW_CONT_F0_VBAT_REFER						(4000)
 #define AW_VBAT_MIN									(3000)
 #define AW_VBAT_MAX									(4500)
 #define AW_DRV_WIDTH_MIN							(0)
@@ -68,14 +74,14 @@
 #define AW_TRIG_NUM									(3)
 #define AW_RAMDATA_RD_BUFFER_SIZE					(1024)
 #define AW_RAMDATA_WR_BUFFER_SIZE					(2048)
-
+#define AW_EFFECT_NUMBER							(3)
 #define AW_GLBRD_STATE_MASK							(15<<0)
 #define AW_STATE_STANDBY							(0x00)
 #define AW_STATE_RTP								(0x08)
 #define AW_BIT_RESET								(0xAA)
 #define AW_CONTAINER_DEFAULT_SIZE					(2 * 1024 * 1024)
 #define AW_RTP_NUM									(6)
-
+#define CPU_LATENCY_QOC_VALUE						(0)
 /*********************************************************
  *
  * Macro Control
@@ -332,6 +338,23 @@ struct mmap_buf_format {
 #define AW8692X_081538_CONT_BEMF_SET				(0x00)
 #define AW8692X_081538_CONT_BST_BRK_GAIN			(0x00)
 #define AW8692X_081538_CONT_BRK_GAIN				(0x00)
+
+#define AW8693XS_0815_F0_PRE						(1700)
+#define AW8693XS_0815_F0_CALI_PERCEN				(10)
+/* need to check */
+#define AW8693XS_0815_CONT_DRV1_LVL					(0x7F)
+#define AW8693XS_0815_CONT_DRV1_TIME				(0x04)
+#define AW8693XS_0815_CONT_DRV2_TIME				(0x14)
+#define AW8693XS_0815_CONT_BRK_TIME					(0x08)
+#define AW8693XS_0815_CONT_TRACK_MARGIN				(0x0F)
+#define AW8693XS_0815_CONT_BRK_GAIN					(0x08)
+#define AW8693XS_D2S_GAIN_DEFAULT					(0x04)
+#define AW8693XS_BEMF_D2S_GAIN_DEFAULT					(0x04)
+#define AW8693XS_BST_VOL_DEFAULT					(0x11)
+#define AW8693XS_GAIN_BYPASS						(0x01)
+#define AW8693XS_UVLO_VOL_DEFAULT					(0x15)
+#define AW8693XS_LRA_VRMS							(900)
+#define AW8693XS_TRGCFG9							(0x43)
 #endif
 
 #define AW8692X_TRIG1_DUAL_LEVEL					(1)
@@ -494,8 +517,9 @@ struct mmap_buf_format {
  * AW8692X
  *
  *********************************************************/
-#define AW8692X_REG_SUM								(88)
 #define AW8692X_VBAT_MAX							(5500)
+#define AW8692X_F0_FORMULA(f0_reg)					(384000 * 10 / (f0_reg))
+
 #define AW8692X_LRA_FORMULA(lra, d2s_gain)			((6075 * 100 * (lra)) / \
 						(1024 * (d2s_gain)))
 #define AW8692X_VBAT_FORMULA(vbat)					(5 * 1215 * (vbat) / 1024)
@@ -507,6 +531,38 @@ struct mmap_buf_format {
 #define AW8692X_SET_FIFO_AE_ADDR_L(base_addr)		(((base_addr) >> 1) & 0x00ff)
 #define AW8692X_SET_FIFO_AF_ADDR_H(base_addr)		((((base_addr) - (base_addr >> 2)) >> 8) & 0x0F)
 #define AW8692X_SET_FIFO_AF_ADDR_L(base_addr)		(((base_addr) - ((base_addr) >> 2)) & 0x00ff)
+
+/*********************************************************
+ *
+ * AW8693XS
+ *
+ *********************************************************/
+#define AW8693XS_OSC_CALI_ACCURACY					(22)
+#define AW8693XS_BST_VOL_MIN						(6000)
+#define AW8693XS_BST_VOL_MAX						(11000)
+#define AW8693XS_PRO_BSTMAX_MIN						(5000)
+#define AW8693XS_PRO_BSTMAX_MAX						(12500)
+#define AW8693XS_PRO_IPEAK_MIN						(1500)
+#define AW8693XS_PRO_IPEAK_MAX						(4750)
+#define AW8693XS_DRV2_LVL_FORMULA(f0, vrms)			((((f0) < 1800) ? 1809920 : 1990912) / 1000 * (vrms) / 40000)
+#define AW8693XS_BST_VOL_FORMULA(bst_vol)			(((bst_vol) - 6000) / 250 + 5)
+#define AW8693XS_BST_MAX_FORMULA(bst_max)			(((bst_max) - 5000) / 500)
+#define AW8693XS_IPEAK_FORMULA(ipeak)				(((ipeak) - 1500) / 250)
+#define AW8693XS_F0_FORMULA(f0_reg)					(384000 * 10 / (f0_reg))
+#define AW8693XS_LRA_FORMULA(lra, d2s_gain)			((610000 * (lra)) / (1023 * (d2s_gain)))
+#define AW8693XS_VBAT_FORMULA(vbat)					(6100 * (vbat) / 1023)
+#define AW8693XS_OS_FORMULA(os_code, d2s_gain)		(2440 * ((os_code) - 512) / (1023 * ((d2s_gain) + 1)))
+#define AW8693XS_F_PRE_FORMULA(f0_pre)				(240000 / (f0_pre))
+#define AW8693XS_BASEADDR_H(base_addr)				((base_addr) >> 8)
+#define AW8693XS_BASEADDR_L(base_addr)				((base_addr) & 0x00FF)
+#define AW8693XS_FIFO_AE_ADDR_H(base_addr)			((((base_addr) >> 1) >> 4) & 0xF0)
+#define AW8693XS_FIFO_AE_ADDR_L(base_addr)			(((base_addr) >> 1) & 0x00ff)
+#define AW8693XS_FIFO_AF_ADDR_H(base_addr)			((((base_addr) - ((base_addr) >> 2)) >> 8) & 0x0F)
+#define AW8693XS_FIFO_AF_ADDR_L(base_addr)			(((base_addr) - ((base_addr) >> 2)) & 0x00ff)
+#define AW8693XS_CALI_DATA_FORMULA(f0, f0_pre, s) \
+										 (10 * ((int)f0_pre * (10000 + s * AW8693XS_OSC_CALI_ACCURACY) - \
+											 10000 * (int)f0) / ((int)f0 * AW8693XS_OSC_CALI_ACCURACY))
+
 
 #define AW_DRV_WIDTH_FARMULA(f0_pre, brk_gain, track_margain) (240000 / \
 			     (f0_pre) - 8 - (brk_gain) - (track_margain))
@@ -540,6 +596,9 @@ enum aw_haptic_wav_seq_flags {
 	AW_SEQ = 1,
 };
 
+
+
+
 enum aw_haptic_work_mode {
 	AW_RAM_LOOP_MODE = 0,
 	AW_CONT_MODE = 1,
@@ -547,6 +606,20 @@ enum aw_haptic_work_mode {
 	AW_RTP_MODE = 3,
 	AW_TRIG_MODE = 4,
 	AW_STANDBY_MODE = 5,
+};
+
+enum aw_haptic_irq_status {
+	AW_IRQ_ALMOST_EMPTY = 1,
+	AW_IRQ_ALMOST_FULL = 2,
+	AW_IRQ_BST_SCP = 3,
+	AW_IRQ_BST_OVP = 4,
+	AW_IRQ_UVLO = 5,
+	AW_IRQ_OCD = 6,
+	AW_IRQ_OT = 7,
+	AW_IRQ_LOW_VBAT = 8,
+	AW_IRQ_OV = 9,
+	AW_IRQ_DONE = 10,
+	AW_IRQ_CP_OVP = 11,
 };
 
 enum aw_haptic_bst_mode {
@@ -558,6 +631,11 @@ enum aw_haptic_bst_pc {
 	AW_BST_PC_L1 = 0,
 	AW_BST_PC_L2 = 1,
 };
+
+typedef enum {
+	AW_VBAT_PRO1 = 0,
+	AW_VBAT_PRO2 = 1,
+} aw_pro_pc;
 
 enum aw_haptic_cont_vbat_comp_mode {
 	AW_CONT_VBAT_SW_COMP_MODE = 0,
@@ -578,6 +656,7 @@ enum aw_haptic_pwm_mode {
 	AW_PWM_48K = 0,
 	AW_PWM_24K = 1,
 	AW_PWM_12K = 2,
+	AW_PWM_8K = 3,
 };
 
 enum aw_haptic_play {
@@ -607,9 +686,26 @@ enum aw_haptic_awrw_flag {
 	AW_SEQ_READ = 1,
 };
 
+enum aw_trim_lra {
+	AW_TRIM_LRA_BOUNDARY = 0x20,
+	AW8672X_TRIM_LRA_BOUNDARY = 0x40,
+	AW8693X_TRIM_LRA_BOUNDARY = 0x40,
+	AW8693XS_TRIM_LRA_BOUNDARY = 0x80,
+};
+
 enum aw_haptic_read_write {
 	AW_HAPTIC_CMD_READ_REG = 0,
 	AW_HAPTIC_CMD_WRITE_REG = 1,
+};
+
+enum aw_reg_value {
+	AW_REG_VALUE_MIN = 0,
+	AW_REG_VALUE_MAX = 0xFF,
+};
+
+enum aw_trim_config {
+	AW_TRIM_EFUSE = 0x00,
+	AW_TRIM_REGISTER = 0x20,
 };
 /*********************************************************
  *
@@ -627,6 +723,16 @@ enum aw8692x_haptic_trig {
 	AW8692X_TRIG1,
 	AW8692X_TRIG2,
 	AW8692X_TRIG3,
+};
+
+/*********************************************************
+ *
+ * Enum aw8693xs
+ *
+ *********************************************************/
+enum d2s_gain_sel {
+	AW8693XS_D2S_GAIN,
+	AW8693XS_BEMF_D2S_GAIN,
 };
 
 /*********************************************************
@@ -698,6 +804,7 @@ struct aw_haptic_dts_info {
 	uint8_t max_bst_vol;
 	uint32_t f0_pre;
 	uint32_t cont_lra_vrms;
+	uint32_t bst_vol_def;
 
 	/* AW869X */
 	uint8_t tset;
@@ -717,10 +824,13 @@ struct aw_haptic_dts_info {
 
 	/* AW869XX */
 	uint8_t d2s_gain;
+	uint8_t bemf_d2s_gain;
+	uint8_t gain_bypass;
+	uint8_t uvlo_vol_default;
 	uint8_t brk_bst_md;
 	uint8_t bst_vol_ram;
 	uint8_t bst_vol_rtp;
-	uint8_t bst_vol_default;
+	uint32_t bst_vol_default;
 	uint8_t cont_tset;
 	uint8_t cont_drv1_lvl;
 	uint8_t cont_drv2_lvl;
@@ -737,6 +847,11 @@ struct aw_haptic_dts_info {
 	uint8_t prctmode[3];
 	uint8_t sine_array[4];
 	uint8_t trig_cfg[24];
+	uint8_t trig_gain;
+	bool is_enabled_track_en;
+	bool is_enabled_inter_brake;
+	bool is_enabled_low_power;
+	bool is_enabled_vbat_pro;
 	bool is_enabled_auto_bst;
 	bool is_enabled_i2s;
 	bool is_enabled_one_wire;
@@ -767,8 +882,10 @@ typedef struct aw_haptic {
 	uint8_t vibration_style;
 	uint8_t seq[AW_SEQUENCER_SIZE];
 	uint8_t loop[AW_SEQUENCER_SIZE];
+	uint8_t trim_lra_boundary;
 
-	uint8_t vmax;
+	int osc_trim_s;
+	int vmax;
 	int gain;
 	int rate;
 	int width;
@@ -790,6 +907,7 @@ typedef struct aw_haptic {
 	uint32_t cont_f0;
 	uint32_t rtp_cnt;
 	uint32_t rtp_len;
+	uint32_t rtp_num;
 	uint32_t gun_type;
 	uint32_t bullet_nr;
 	uint32_t gun_mode;
@@ -823,6 +941,7 @@ typedef struct aw_haptic {
 	struct work_struct rtp_key_work;
 	struct delayed_work ram_work;
 	struct work_struct vibrator_work;
+	struct workqueue_struct *work_queue;
 	struct aw_haptic_ram ram;
 	struct aw_haptic_dts_info info;
 	struct pinctrl *pinctrl;
@@ -846,9 +965,10 @@ typedef struct aw_haptic {
 	struct work_struct  motor_old_test_work;
 	unsigned int motor_old_test_mode;
 	bool livetap_support;
-	uint8_t max_boost_vol;
+	int max_boost_vol;
 	bool auto_break_mode_support;
 	unsigned int vbat_low_vmax_level;
+	int trig_gain;
 #endif
 }aw_haptic_t;
 
@@ -888,7 +1008,7 @@ struct aw_haptic_func {
 			 struct device_node *);
 	void (*trig_init)(struct aw_haptic *);
 	void (*irq_clear)(struct aw_haptic *);
-	void (*set_ram_addr)(struct aw_haptic *, uint32_t);
+	void (*set_ram_addr)(struct aw_haptic *);
 	void (*misc_para_init)(struct aw_haptic *);
 	void (*interrupt_setup)(struct aw_haptic *);
 	void (*set_rtp_aei)(struct aw_haptic *, bool);
@@ -897,7 +1017,7 @@ struct aw_haptic_func {
 	size_t (*get_wav_loop)(struct aw_haptic *, char *);
 	ssize_t (*get_reg)(struct aw_haptic *, ssize_t, char *);
 	uint8_t (*get_prctmode)(struct aw_haptic *);
-	void (*get_ram_data)(struct aw_haptic *, uint8_t *, uint32_t);
+	void (*get_ram_data)(struct aw_haptic *, char *);
 	void (*get_first_wave_addr)(struct aw_haptic *, uint8_t *);
 	uint8_t (*get_glb_state)(struct aw_haptic *);
 	uint8_t (*get_chip_state)(struct aw_haptic *);
@@ -905,14 +1025,24 @@ struct aw_haptic_func {
 	uint8_t (*get_osc_status)(struct aw_haptic *);
 	uint8_t (*rtp_get_fifo_afs)(struct aw_haptic *);
 	uint8_t (*rtp_get_fifo_aes)(struct aw_haptic *);
-	void (*get_wav_seq)(struct aw_haptic *, uint8_t *, uint8_t);
+	void (*get_wav_seq)(struct aw_haptic *, uint32_t len);
 	unsigned long (*get_theory_time)(struct aw_haptic *);
 	void (*haptic_value_init)(struct aw_haptic *);
 	void (*set_ram_data)(struct aw_haptic *, uint8_t *, uint32_t);
 	void (*dump_rtp_regs)(struct aw_haptic *);
 	void (*aw_test)(struct aw_haptic *);
 	int (*check_qualify)(struct aw_haptic *aw_haptic);
-
+	int (*ram_get_f0)(struct aw_haptic *aw_haptic);
+	int (*judge_rtp_going)(struct aw_haptic *aw_haptic);
+	uint8_t (*get_trim_lra)(struct aw_haptic *aw_haptic);
+	void (*get_bemf_peak)(struct aw_haptic *aw_haptic, uint16_t *peak);
+	int (*convert_level_to_vmax)(struct aw_haptic *, struct vmax_map *, int);
+#ifdef AW_SND_SOC_CODEC
+	int (*snd_soc_init)(struct device *dev);
+#endif
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	void (*set_trig_gain)(struct aw_haptic *, uint8_t);
+#endif
 };
 
 /*********************************************************
@@ -947,11 +1077,11 @@ struct aw_que_seq {
 extern struct aw_haptic_func aw869x_func_list;
 extern struct aw_haptic_func aw869xx_func_list;
 extern struct aw_haptic_func aw8692x_func_list;
+extern struct aw_haptic_func aw8693xs_func_list;
 extern struct pm_qos_request aw_pm_qos_req_vb;
 
-
+extern void sw_reset(struct aw_haptic *aw_haptic);
 extern int i2c_r_bytes(struct aw_haptic *, uint8_t, uint8_t *, uint32_t);
 extern int i2c_w_bytes(struct aw_haptic *, uint8_t, uint8_t *, uint32_t);
 extern int i2c_w_bits(struct aw_haptic *, uint8_t, uint32_t, uint8_t);
-
 #endif

@@ -9,11 +9,6 @@
  * the Free Software Foundation
  */
 
-#include <linux/i2c.h>
-#include <linux/vmalloc.h>
-#include <linux/delay.h>
-#include <linux/string.h>
-#include <linux/errno.h>
 #include "haptic_mid.h"
 #include "sih688x_reg.h"
 #include "haptic_regmap.h"

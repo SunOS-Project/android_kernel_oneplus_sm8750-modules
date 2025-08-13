@@ -53,6 +53,7 @@ struct oplus_smart_charge {
 	bool vooc_online;
 	bool wls_online;
 	bool vooc_charging;
+	bool voocphy_bcc_fastchg_ing;
 	unsigned int vooc_sid;
 
 	bool ufcs_online;
@@ -60,7 +61,6 @@ struct oplus_smart_charge {
 	bool pps_online;
 	bool pps_charging;
 	bool pps_oplus_adapter;
-	u32 pps_adapter_id;
 
 	int normal_cool_down;
 	int normal_current;
@@ -74,7 +74,7 @@ struct oplus_smart_charge {
 	int quick_mode_stop_temp;
 	int quick_mode_stop_soc;
 	bool smart_chg_bcc_support;
-	bool smart_chg_soh_support;
+	int smart_chg_soh_flag;
 	bool quick_mode_gain_support;
 
 	int batt_soc;
@@ -174,10 +174,7 @@ static int get_adapter_power(struct oplus_smart_charge *smart_chg)
 	} else if (smart_chg->ufcs_charging) {
 		power = oplus_ufcs_get_ufcs_power(smart_chg->ufcs_topic);
 	} else if (smart_chg->pps_charging) {
-		if (smart_chg->pps_oplus_adapter)
-			power = oplus_pps_adapter_id_to_power(smart_chg->pps_adapter_id);
-		else
-			power = oplus_pps_adapter_id_to_power(PPS_FASTCHG_TYPE_THIRD);
+		power = oplus_pps_get_charging_power_watt(smart_chg->pps_topic);
 	}
 	return power;
 }
@@ -570,12 +567,6 @@ static void oplus_configfs_pps_subs_callback(struct mms_subscribe *subs,
 				break;
 			smart_chg->pps_charging = !!data.intval;
 			break;
-		case PPS_ITEM_ADAPTER_ID:
-			rc = oplus_mms_get_item_data(smart_chg->pps_topic, id, &data, false);
-			if (rc < 0)
-				break;
-			smart_chg->pps_adapter_id = (u32)data.intval;
-			break;
 		case PPS_ITEM_OPLUS_ADAPTER:
 			rc = oplus_mms_get_item_data(smart_chg->pps_topic, id, &data, false);
 			if (rc < 0)
@@ -622,13 +613,6 @@ static void oplus_configfs_subscribe_pps_topic(struct oplus_mms *topic,
 		smart_chg->pps_charging = false;
 	} else {
 		smart_chg->pps_charging = !!data.intval;
-	}
-	rc = oplus_mms_get_item_data(smart_chg->pps_topic, PPS_ITEM_ADAPTER_ID, &data, true);
-	if (rc < 0) {
-		chg_err("can't get pps adapter_id status, rc=%d\n", rc);
-		smart_chg->pps_adapter_id = false;
-	} else {
-		smart_chg->pps_adapter_id = data.intval;
 	}
 	rc = oplus_mms_get_item_data(smart_chg->pps_topic, PPS_ITEM_OPLUS_ADAPTER, &data, true);
 	if (rc < 0) {
@@ -697,11 +681,15 @@ static void oplus_smart_chg_common_topic_ready(struct oplus_mms *topic,
 	/* TODO: wait pps & wireless topic? */
 }
 
+#define SOH_SUPPORT_BIT    0  /* Bit 0: Smart charging SOH support flag */
+#define SN_SUPPORT_BIT     1  /* Bit 1: Battery SN support flag */
 static int oplus_smart_charge_parse_dt(struct oplus_smart_charge *smart_chg)
 {
 	bool bcc_support = 0;
 	struct oplus_mms *vooc_topic;
 	struct device_node *node = oplus_get_node_by_type(smart_chg->dev->of_node);
+	int smart_chg_soh_support;
+	int batt_sn_support;
 
 	vooc_topic = g_smart_chg->vooc_topic;
 
@@ -709,13 +697,18 @@ static int oplus_smart_charge_parse_dt(struct oplus_smart_charge *smart_chg)
 	chg_info("oplus,smart_chg_bcc_support is %d %d %p\n",
 		smart_chg->smart_chg_bcc_support, bcc_support, node);
 
-	smart_chg->smart_chg_soh_support =
-		of_property_read_bool(node, "oplus,smart_chg_soh_support");
+	smart_chg_soh_support = of_property_read_bool(node, "oplus,smart_chg_soh_support");
+	batt_sn_support = of_property_read_bool(node, "oplus,batt_sn_support");
+
+	smart_chg->smart_chg_soh_flag = 0;
+	smart_chg->smart_chg_soh_flag |= (!!smart_chg_soh_support) << SOH_SUPPORT_BIT;
+	smart_chg->smart_chg_soh_flag |= (!!batt_sn_support) << SN_SUPPORT_BIT;
+
 	smart_chg->quick_mode_gain_support =
                 of_property_read_bool(node, "oplus,quick_mode_gain_support");
 
 	chg_info("oplus,smart_chg_soh_support is %d, quick_mode_gain_support = %d\n",
-		smart_chg->smart_chg_soh_support,
+		smart_chg->smart_chg_soh_flag,
 		smart_chg->quick_mode_gain_support);
 
 	return 0;
@@ -1052,7 +1045,8 @@ static void oplus_smart_chg_bcc_set_buffer(int *buffer)
 	    return;
 	}
 
-	if (true == oplus_voocphy_get_fastchg_ing() ||
+	g_smart_chg->voocphy_bcc_fastchg_ing = oplus_voocphy_get_fastchg_ing();
+	if (g_smart_chg->voocphy_bcc_fastchg_ing ||
 		(oplus_vooc_get_fastchg_ing() && oplus_vooc_get_fast_chg_type() != BCC_TYPE_IS_VOOC)){
 		bcc_current_max = oplus_vooc_check_bcc_max_curr();
 		bcc_current_min = oplus_vooc_check_bcc_min_curr();
@@ -1137,7 +1131,6 @@ int oplus_smart_chg_get_battery_bcc_parameters(char *buf)
 	struct oplus_mms *wired_topic;
 	bool vooc_get_fastchg_ing;
 	int vooc_get_fast_chg_type;
-	bool voocphy_get_fastchg_ing;
 	int vooc_check_bcc_temp_range;
 	bool wls_fastchg_charging;
 
@@ -1149,12 +1142,12 @@ int oplus_smart_chg_get_battery_bcc_parameters(char *buf)
 	oplus_smart_chg_bcc_set_buffer(buffer);
 	vooc_get_fastchg_ing = oplus_vooc_get_fastchg_ing();
 	vooc_get_fast_chg_type = oplus_vooc_get_fast_chg_type();
-	voocphy_get_fastchg_ing = oplus_voocphy_get_fastchg_ing();
 	vooc_check_bcc_temp_range = oplus_vooc_check_bcc_temp_range();
 	wls_fastchg_charging = oplus_wls_get_fastchg_ing();
 
 	if ((vooc_get_fastchg_ing && vooc_get_fast_chg_type != BCC_TYPE_IS_VOOC) ||
-	    voocphy_get_fastchg_ing || g_smart_chg->ufcs_charging || wls_fastchg_charging) {
+	    g_smart_chg->voocphy_bcc_fastchg_ing || g_smart_chg->ufcs_charging ||
+	    wls_fastchg_charging) {
 		buffer[15] = 1;
 	} else {
 		buffer[15] = 0;
@@ -1178,7 +1171,7 @@ int oplus_smart_chg_get_battery_bcc_parameters(char *buf)
 
 	buffer[16] = oplus_wired_get_bcc_curr_done_status(wired_topic);
 
-	if (voocphy_get_fastchg_ing ||
+	if (g_smart_chg->voocphy_bcc_fastchg_ing ||
 	    (vooc_get_fastchg_ing && (vooc_get_fast_chg_type != BCC_TYPE_IS_VOOC))) {
 		if (vooc_check_bcc_temp_range == BCC_TEMP_RANGE_WRONG) {
 			buffer[9] = 0;
@@ -1209,7 +1202,7 @@ int oplus_smart_chg_get_battery_bcc_parameters(char *buf)
 		buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
 		buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15], buffer[16],
 		buffer[17], buffer[18], vooc_get_fastchg_ing, vooc_get_fast_chg_type, vooc_check_bcc_temp_range,
-		voocphy_get_fastchg_ing, g_smart_chg->ufcs_charging, oplus_ufcs_check_bcc_temp_range(g_smart_chg),
+		g_smart_chg->voocphy_bcc_fastchg_ing, g_smart_chg->ufcs_charging, oplus_ufcs_check_bcc_temp_range(g_smart_chg),
 		wls_fastchg_charging, oplus_wls_check_bcc_temp_range(g_smart_chg));
 
 	memset(buf, 0, BCC_PAGE_SIZE);
@@ -1608,5 +1601,5 @@ int oplus_smart_chg_get_soh_support(void)
 	if (g_smart_chg == NULL)
 		return -ENODEV;
 
-	return g_smart_chg->smart_chg_soh_support;
+	return g_smart_chg->smart_chg_soh_flag;
 }

@@ -1,1 +1,1 @@
-#obj-y += synaptics_tcm2/
+obj-y += s3910/

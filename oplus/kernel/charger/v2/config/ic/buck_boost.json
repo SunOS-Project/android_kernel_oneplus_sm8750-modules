@@ -1287,8 +1287,79 @@
                 "write": false,
                 "overwrite": false
             }
+        },
+        {
+            "lable": "OPLUS_IC_FUNC_BUCK_GET_LPD_INFO",
+            "desc": {
+                "zh": "获取潮湿检测信息"
+            },
+            "auto_debug_code": true,
+            "parameter_list": ["u32 *", "u32"],
+            "parameter_desc": [
+                {
+                    "range": "0-*",
+                    "type": "out",
+                    "desc": {
+                        "zh": "用于存放潮湿检测数据"
+                    }
+                },
+                {
+                    "range": "0-*",
+                    "type": "in",
+                    "desc": {
+                        "zh": "用于标记需要获取的潮湿检测数据源"
+                    }
+                }
+            ],
+            "vict": {
+                "read": {
+                    "cmd": "vict -f {id} -G vic-*",
+                    "desc": {
+                        "zh": "获取潮湿检测数据,对应数据分别为:SBU1,SBU2,SBU1_PULLUP,SBU2_PULLUP,CC1,CC2,DM,DP"
+                    }
+                },
+                "write": false,
+                "overwrite": {
+                    "cmd": "vict -f {id} -O {val} vic-*",
+                    "desc": {
+                        "zh": "val单位为mv输入顺序为:SBU1,SBU2,SBU1_PULLUP,SBU2_PULLUP,CC1,CC2,DM,DP"
+                    }
+                }
+            }
+        },
+        {
+            "lable": "OPLUS_IC_FUNC_BUCK_SET_FLASH_MODE",
+            "desc": {
+                "zh": "设置高压打闪模式"
+            },
+            "auto_debug_code": true,
+            "parameter_list": ["bool"],
+            "parameter_desc": [
+                {
+                    "range": "0-1",
+                    "type": "in",
+                    "desc": {
+                        "zh": "1: 高压打闪模式, 0: 非高压打闪模式"
+                    }
+                }
+            ],
+            "vict": {
+                "read": false,
+                "write": {
+                    "cmd": "vict -f {id} -S{val} vic-*",
+                    "desc": {
+                        "zh": "N/A"
+                    }
+                },
+                "overwrite": {
+                    "cmd": "vict -f {id} -O {val} vic-*",
+                    "desc": {
+                        "zh": "N/A"
+                    }
+                }
+            }
         }
     ],
 
-    "version": "V2.2:46:c4285c3e1829a175785a27cc4ca474bf9fa1d76bf17bd6521cc1092d27dc825e"
+    "version": "V2.4:48:c7994cffa768028306890fd8b50e121a31af02ae4a94398dddafb7836e115e50"
 }

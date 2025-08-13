@@ -768,6 +768,13 @@
                     "str": "batt_sub_btb"
                 },
                 {
+                    "lable": "TRACK_GAGUE_QCOM_CALI_INFO",
+                    "desc": {
+                        "zh": "QCOM平台电量计异常校准信息"
+                    },
+                    "str": "qcom_cali_info"
+                },
+                {
                     "lable": "TRACK_GAGUE_ERR_MAX",
                     "desc": {
                         "zh": "异常上限"
@@ -1066,9 +1073,72 @@
                     "str": "unknown"
                 }
             ]
+        },
+        {
+            "name": "sec_ic_err",
+            "desc":{
+                "zh": "加密IC故障类型"
+            },
+            "list": [
+                {
+                    "lable": "SEC_IC_ERR_ECDSA_FAIL",
+                    "desc": {
+                        "zh": "ECDSA加密失败"
+                    },
+                    "str": "ecdsa_fail"
+                },
+                {
+                    "lable": "SEC_IC_ERR_ECW_FAIL",
+                    "desc": {
+                        "zh": "ECW加密失败"
+                    },
+                    "str": "ecw_fail"
+                },
+                {
+                    "lable": "SEC_IC_ERR_MEM_R_FAIL",
+                    "desc": {
+                        "zh": "存储空间读取失败"
+                    },
+                    "str": "mem_read_fail"
+                },
+                {
+                    "lable": "SEC_IC_ERR_MEM_W_FAIL",
+                    "desc": {
+                        "zh": "存储空间写入失败"
+                    },
+                    "str": "mem_write_fail"
+                },
+                {
+                    "lable": "SEC_IC_ERR_ROMID_FAIL",
+                    "desc": {
+                        "zh": "romid获取失败"
+                    },
+                    "str": "romid_fail"
+                },
+                {
+                    "lable": "SEC_IC_ERR_I2C",
+                    "desc": {
+                        "zh": "I2C通讯错误"
+                    },
+                    "str": "i2c_fail"
+                },
+                {
+                    "lable": "SEC_IC_MEM_REC",
+                    "desc": {
+                        "zh": "存储空间数据回传"
+                    },
+                    "str": "mem_rec"
+                },
+                {
+                    "lable": "SEC_IC_ERR_UNKNOW",
+                    "desc": {
+                        "zh": "未知错误"
+                    },
+                    "str": "unknow"
+                }
+            ]
         }
     ],
-
     "oplus_chg_ic_list": [
         "ic/common.json",
         "ic/wireless_rx.json",
@@ -1081,6 +1151,8 @@
         "ic/switch.json",
         "ic/ufcs.json",
         "ic/pps.json",
-        "ic/batt_bal.json"
+        "ic/batt_bal.json",
+        "ic/gauge2.json",
+        "ic/sec.json"
     ]
 }

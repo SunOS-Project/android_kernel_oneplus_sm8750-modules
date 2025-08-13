@@ -148,6 +148,7 @@ struct oplus_ap_read_ufcs_resp_msg {
 struct oplus_ap_read_req_msg {
 	struct pmic_glink_hdr hdr;
 	u32 message_id;
+	u32 value;
 };
 
 struct oplus_ap_read_buffer_resp_msg {
@@ -162,6 +163,7 @@ enum oplus_ap_message_id {
 	AP_MESSAGE_GET_GAUGE_REG_INFO,
 	AP_MESSAGE_GET_GAUGE_CALIB_TIME,
 	AP_MESSAGE_GET_GAUGE_BATTINFO,
+	AP_MESSAGE_GET_LPD_INFO,
 	AP_MESSAGE_MAX_SIZE = 32,
 };
 
@@ -409,6 +411,25 @@ enum WLS_BOOST_SOURCE {
 	WLS_BOOST_SOURCE_PMIC_WLS,
 };
 
+enum charging_status {
+	CHARGING_TYPE_UNKNOW,
+	CHARGING_TYPE_VOOC_SVOOC,
+	CHARGING_TYPE_OPLUS_UFCS,
+	CHARGING_TYPE_OPLUS_PPS,
+	CHARGING_TYPE_THIRD_UFCS,
+	CHARGING_TYPE_THIRD_PPS,
+	CHARGING_TYPE_FFC,
+	CHARGING_TYPE_MAX,
+};
+
+enum qbg_full_temp_region {
+	QBG_TEMP_COLD,
+	QBG_TEMP_COOL,
+	QBG_TEMP_NORMAL,
+	QBG_TEMP_WARM,
+	QBG_TEMP_MAX,
+};
+
 enum OEM_MISC_CTL_CMD {
 	OEM_MISC_CTL_CMD_LCM_EN = 0,
 	OEM_MISC_CTL_CMD_LCM_25K = 2,
@@ -579,6 +600,25 @@ enum oplus_sub_btb_adc_index {
 	OPLUS_SUB_BTB_VALD_MAX_ADC,
 	OPLUS_SUB_BTB_MAX,
 };
+
+#define OPLUS_CHG_TRACK_PLAT_CALI_INFO_LEN	300
+
+enum oplus_gauge_track_type {
+	GAUGE_TRACK_CALI_FLAG_ZCV = 1,
+	GAUGE_TRACK_CALI_FLAG_AGING = 2,
+	GAUGE_TRACK_CALI_FLAG_PLUGOUT = 4,
+	GAUGE_TRACK_CALI_FLAG_CHG_FULL = 5
+};
+
+struct gauge_track_cali_info_s {
+	int vbat;
+	int tbat;
+	int soc;
+	int cycle_count;
+	int learn_capacity;
+	int imp;
+	int soh;
+};
 #endif
 
 struct battery_chg_dev {
@@ -675,6 +715,12 @@ struct battery_chg_dev {
 	bool					voocphy_err_check;
 	bool			bypass_vooc_support;
 	bool			usb_aicl_enhance;
+	bool				qcom_gauge_cali_track_support;
+	struct gauge_track_cali_info_s 	*pre_info;
+	struct work_struct		gauge_cali_track_by_plug_work;
+	struct work_struct		gauge_cali_track_by_full_work;
+	struct mutex                    pre_info_lock;
+	struct mutex                    cur_info_lock;
 #endif
 #ifdef OPLUS_FEATURE_CHG_BASIC
 	int vchg_trig_irq;
@@ -749,6 +795,9 @@ struct battery_chg_dev {
 	bool error_prop;
 	int sub_btb_valid_temp[OPLUS_SUB_BTB_MAX];
 #endif
+	int batt_full_para[CHARGING_TYPE_MAX][QBG_TEMP_MAX];
+	int batt_full_temp[QBG_TEMP_MAX];
+	bool batt_full_method_new;
 };
 
 /**********************************************************************

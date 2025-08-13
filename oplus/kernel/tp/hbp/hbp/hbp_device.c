@@ -662,7 +662,8 @@ static irqreturn_t hbp_irq_threaded_fn(int irq, void *dev_id)
 		if (reason == IRQ_REASON_RESET_WDT
 				|| reason == IRQ_REASON_RESET_PWR
 				|| reason == IRQ_REASON_RESET_FWUPDATE
-				|| reason == IRQ_REASON_RESPONSE) {
+				|| reason == IRQ_REASON_RESPONSE
+				|| reason == IRQ_REASON_RESET_IDENTIFY) {
 			goto report_frame;
 		}
 	}
@@ -758,7 +759,11 @@ static int hbp_register_irq_func(struct hbp_device *hbp_dev)
 		ret = request_threaded_irq(hbp_dev->irq,
 					   hbp_irq_handler,
 					   hbp_irq_threaded_fn,
+#ifdef CONFIG_TOUCHPANEL_MTK_PLATFORM
 					   hbp_dev->irq_flags | IRQF_ONESHOT | IRQF_NO_SUSPEND,
+#else
+					   hbp_dev->irq_flags | IRQF_ONESHOT,
+#endif
 					   irq_name,
 					   hbp_dev);
 		if (ret < 0) {

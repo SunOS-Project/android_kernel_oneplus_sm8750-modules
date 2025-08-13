@@ -138,6 +138,7 @@ struct oplus_mms {
 	struct mutex sync_msg_lock;
 	struct delayed_work update_work;
 	struct delayed_work msg_work;
+	struct work_struct callback_work;
 
 	struct device_node *of_node;
 	void *drv_data;

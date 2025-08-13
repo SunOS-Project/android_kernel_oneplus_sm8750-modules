@@ -188,6 +188,10 @@ int oplus_gauge_get_sili_alg_lifetime_info(struct oplus_mms *mms, u8 *info, int 
 int oplus_gauge_get_battinfo_manu_date(struct oplus_mms *topic, char *buff, int size_buffer);
 int oplus_gauge_get_battinfo_first_usage_date(struct oplus_mms *topic, char *buff, int size_buffer);
 int oplus_gauge_set_battinfo_first_usage_date(struct oplus_mms *topic, const char *buff);
+int oplus_set_reset_gauge_parms(struct oplus_mms *topic, const int *buff);
+int oplus_gauge_get_batt_sn(struct oplus_mms *topic, char *buff, int size_buffer);
+int oplus_gauge_get_historic_soh_date(struct oplus_mms *topic, int *buff, int size_buffer);
+int oplus_set_histrioc_soh_date(struct oplus_mms *topic, const int *buff);
 int oplus_gauge_get_ui_cc(struct oplus_mms *topic);
 int oplus_gauge_set_ui_cc(struct oplus_mms *topic, int count);
 int oplus_gauge_get_ui_soh(struct oplus_mms *topic);
@@ -200,4 +204,12 @@ bool oplus_gauge_set_fg_vct(struct oplus_mms *mms, int count);
 int oplus_gauge_get_fg_vct(struct oplus_mms *mms);
 int oplus_gauge_get_dec_pack_type(struct oplus_mms *mms);
 int oplus_gauge_get_dec_cv_soh(struct oplus_mms *mms);
+int oplus_gauge_sec_get_romid(struct oplus_mms *topic, uint8_t *romid, int *len);
+int oplus_gauge_sec_write_page(struct oplus_mms *topic, int page_id, uint8_t *data, int len);
+int oplus_gauge_sec_read_page(struct oplus_mms *topic, int page_id, uint8_t *data, int *len);
+int oplus_gauge_sec_ecdsa(struct oplus_mms *topic, bool *val);
+int oplus_gauge_sec_ecw(struct oplus_mms *topic, bool *val);
+int oplus_gauge_sec_shutdown(struct oplus_mms *topic, bool *val);
+int oplus_gauge_sec_set_prikey(struct oplus_mms *topic, int index, uint8_t *prikey, int len);
+int oplus_gauge_sec_get_prikey_index(struct oplus_mms *topic, int *index);
 #endif /* __OPLUS_MMS_GAUGE_H__ */
