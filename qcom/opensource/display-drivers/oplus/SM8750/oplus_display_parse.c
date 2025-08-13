@@ -317,6 +317,11 @@ int oplus_panel_parse_features_config(struct dsi_panel *panel)
 	OPLUS_DSI_INFO("oplus,panel_init_compatibility_enable: %s\n",
 			panel->oplus_panel.vid_timming_switch_enabled ? "true" : "false");
 
+	panel->oplus_panel.vid_timming_switch_post_enabled = utils->read_bool(utils->data,
+			"oplus,dsi_vid_timming_switch_post_enable");
+	OPLUS_DSI_INFO("oplus,dsi_vid_timming_switch_post_enable: %s\n",
+			panel->oplus_panel.vid_timming_switch_post_enabled ? "true" : "false");
+
 	panel->oplus_panel.change_voltage_before_panel_bl_0 = utils->read_bool(utils->data,
 			"oplus,change-voltage-before-panel-bl-0-enable");
 	OPLUS_DSI_INFO("oplus,change-voltage-before-panel-bl-0-enable: %s\n",
@@ -335,6 +340,11 @@ int oplus_panel_parse_features_config(struct dsi_panel *panel)
 	panel->oplus_panel.white_point_compensation_enabled = utils->read_bool(utils->data,
 			"oplus,dsi-white-point-compensation-enabled");
 	OPLUS_DSI_INFO("oplus,dsi-white-point-compensation-enabled: %s\n", panel->oplus_panel.white_point_compensation_enabled ? "true" : "false");
+
+	panel->oplus_panel.mipi_reset_enable = utils->read_bool(utils->data,
+		"oplus,mipi-reset-enable");
+	OPLUS_DSI_INFO("oplus,mipi-reset-enable: %s\n",
+		panel->oplus_panel.mipi_reset_enable ? "true" : "false");
 
 	return 0;
 }
@@ -382,6 +392,47 @@ int oplus_panel_parse_vsync_config(
 	return 0;
 }
 
+void oplus_panel_parse_ignore_mode_config(struct dsi_panel *panel)
+{
+	int rc = 0;
+	struct dsi_parser_utils *utils = &panel->utils;
+	char payload[128] = "";
+	u32 cnt = 0;
+
+	panel->oplus_panel.ignore_mode_count = utils->count_u32_elems(utils->data,
+			"oplus,factory-ignore-mode");
+	if (panel->oplus_panel.ignore_mode_count < 1) {
+		OPLUS_DSI_INFO("factory ignore mode is NULL!\n");
+		panel->oplus_panel.ignore_mode_count = 0;
+		return;
+	}
+
+	panel->oplus_panel.ignore_mode = kcalloc(panel->oplus_panel.ignore_mode_count,
+			sizeof(u32), GFP_KERNEL);
+	if (!panel->oplus_panel.ignore_mode) {
+		kfree(panel->oplus_panel.ignore_mode);
+		OPLUS_DSI_ERR("factory ignore mode list alloc failed!\n");
+		return;
+	}
+
+	rc = utils->read_u32_array(utils->data,
+			"oplus,factory-ignore-mode",
+			panel->oplus_panel.ignore_mode,
+			panel->oplus_panel.ignore_mode_count);
+
+	if (rc) {
+		OPLUS_DSI_ERR("factory ignore mode list parse failed!\n");
+		return;
+	}
+
+	for (int i = 0; i < panel->oplus_panel.ignore_mode_count; i++) {
+		cnt += scnprintf(payload + cnt, sizeof(payload) - cnt, "[%u]", panel->oplus_panel.ignore_mode[i]);
+	}
+	OPLUS_DSI_INFO("parse ignore mode count: %d, mode_list: %s\n", panel->oplus_panel.ignore_mode_count, payload);
+
+	return;
+}
+
 int oplus_panel_parse_config(struct dsi_panel *panel)
 {
 	if (!panel) {
@@ -404,6 +455,7 @@ int oplus_panel_parse_config(struct dsi_panel *panel)
 	oplus_dsi_panel_parse_mipi_err(panel);
 	oplus_dsi_panel_parse_pcd(panel);
 	oplus_dsi_panel_parse_lvd(panel);
+	oplus_panel_parse_ignore_mode_config(panel);
 
 	return 0;
 }

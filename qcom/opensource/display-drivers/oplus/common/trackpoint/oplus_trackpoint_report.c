@@ -88,11 +88,26 @@ static void trackpoint_event_work(struct work_struct *work)
 	}
 
 	genlmsg_put(skb, server_pid, 0, &trackpoint_genl_family, 0, TRACKPOINT_CMD_UPLOAD);
-	nla_put_s32(skb, UPLOAD_CMD_ATTR_TYPE, event->tp.type);
-	nla_put_s32(skb, UPLOAD_CMD_ATTR_EVENT_ID, event->tp.event_id);
-	nla_put_s32(skb, UPLOAD_CMD_ATTR_SUB_EVENT_ID, event->tp.sub_event_id);
-	nla_put_string(skb, UPLOAD_CMD_ATTR_MESSAGE, event->tp.message);
-	nla_put_string(skb, UPLOAD_CMD_ATTR_FUNC_LINE, event->tp.func_line);
+	ret = nla_put_s32(skb, UPLOAD_CMD_ATTR_TYPE, event->tp.type);
+	if (ret) {
+		pr_err("%s: nla_put_s32 event->tp.type failed\n", __func__);
+	}
+	ret = nla_put_s32(skb, UPLOAD_CMD_ATTR_EVENT_ID, event->tp.event_id);
+	if (ret) {
+		pr_err("%s: nla_put_s32 event->tp.event_id failed\n", __func__);
+	}
+	ret = nla_put_s32(skb, UPLOAD_CMD_ATTR_SUB_EVENT_ID, event->tp.sub_event_id);
+	if (ret) {
+		pr_err("%s: nla_put_s32 event->tp.sub_event_id failed\n", __func__);
+	}
+	ret = nla_put_string(skb, UPLOAD_CMD_ATTR_MESSAGE, event->tp.message);
+	if (ret) {
+		pr_err("%s: nla_put_string event->tp.message failed\n", __func__);
+	}
+	ret = nla_put_string(skb, UPLOAD_CMD_ATTR_FUNC_LINE, event->tp.func_line);
+	if (ret) {
+		pr_err("%s: nla_put_string event->tp.func_line failed\n", __func__);
+	}
 	kfree(event);
 
 	genlmsg_end(skb, genlmsg_data(nlmsg_data(nlmsg_hdr(skb))));

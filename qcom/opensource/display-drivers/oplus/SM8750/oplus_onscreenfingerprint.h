@@ -9,6 +9,7 @@
 
 #ifndef _OPLUS_ONSCREENFINGERPRINT_H_
 #define _OPLUS_ONSCREENFINGERPRINT_H_
+#define VIDEO_AOD_BRIGHTNESS_VALUE_COUNT 4
 
 /* please just only include linux common head file to keep me pure */
 #include "oplus_display_sysfs_attrs.h"
@@ -124,6 +125,12 @@ enum oplus_ofp_longrui_aod_mode {					/* system setting */
 	OPLUS_OFP_FULL_SCREEN_AOD_MODE = BIT(2),
 };
 
+enum oplus_ofp_video_aod_starte {					/* Video mode 30hz AOD seeting */
+	OPLUS_OFP_VIDEO_AOD_STATE_BASE = 0,
+	OPLUS_OFP_VIDEO_AOD_STATE_READY = 1,
+	OPLUS_OFP_VIDEO_AOD_STATE_READY_END = 2,
+};
+
 /* remember to initialize params */
 struct oplus_ofp_params {
 	unsigned int fp_type;							/*
@@ -190,8 +197,11 @@ struct oplus_ofp_params {
 	struct workqueue_struct *aod_off_set_wq;		/* a workqueue used to send aod off cmds to speed up aod unlocking */
 	struct work_struct aod_off_set_work;			/* a work struct used to send aod off cmds to speed up aod unlocking */
 	struct notifier_block touchpanel_event_notifier;/* add for touchpanel event notifier */
-	struct workqueue_struct *video_mode_aod_on_set_wq;
-	struct work_struct oplus_video_mode_30hz_aod_on_work;
+	/* add for enter aod change brightness by light sensor*/
+	bool video_mode_aod_brightness_change_enable;
+	u32 video_mode_aod_brightness_value_count;
+	u8 video_mode_aod_high_brightness_values[VIDEO_AOD_BRIGHTNESS_VALUE_COUNT];
+	u8 video_mode_aod_low_brightness_values[VIDEO_AOD_BRIGHTNESS_VALUE_COUNT];
 };
 
 /* log level config */
@@ -202,6 +212,8 @@ extern unsigned int oplus_ofp_display_id;
 extern unsigned int oplus_display_log_type;
 /* dynamic trace enable */
 extern unsigned int oplus_display_trace_enable;
+/*Flag for video mode frame rate update*/
+extern int oplus_ofp_refresh_flag;
 
 /* debug log */
 #define OFP_ERR(fmt, arg...)	\
@@ -272,14 +284,15 @@ void oplus_ofp_wait_sometime_before_aod_off_handle(void *dsi_display);
 int oplus_ofp_aod_off_handle(void *dsi_display);
 void oplus_ofp_wait_te_before_aod_on(struct dsi_panel *panel);
 int oplus_ofp_power_mode_handle(void *dsi_display, int power_mode);
-int oplus_ofp_video_mode_aod_handle(void *dsi_display, void *dsi_display_mode);
+int oplus_ofp_video_mode_aod_handle(void *sde_encoder_virt);
 void oplus_ofp_aod_off_set_work_handler(struct work_struct *work_item);
 int oplus_ofp_touchpanel_event_notifier_call(struct notifier_block *nb, unsigned long action, void *data);
 int oplus_ofp_aod_off_hbm_on_delay_check(void *sde_encoder_phys);
 int oplus_ofp_aod_off_backlight_recovery(void *sde_encoder_virt);
 int oplus_ofp_ultra_low_power_aod_update(void *sde_encoder_virt);
 bool oplus_ofp_get_aod_state(void);
-void oplus_ofp_video_mode_30hz_aod_on_handler(struct work_struct *work_item);
+void oplus_ofp_video_mode_refresh_flag_update(void *dsi_display_mode);
+int oplus_panel_parse_video_mode_aod_brightness_config(struct dsi_panel *panel);
 
 /* -------------------- node -------------------- */
 /* fp_type */

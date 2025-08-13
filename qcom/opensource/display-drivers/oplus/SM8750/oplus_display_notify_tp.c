@@ -117,6 +117,10 @@ static void oplus_tp_panel_power_off_rst(struct dsi_panel *panel)
 		}
 	} else {
 		/* for other projects */
+		if(panel->oplus_panel.mipi_reset_enable) {
+		OPLUS_DSI_INFO("read oplus,mipi-reset-enable success.\n");
+		usleep_range(10*1000, (10*1000)+100);
+		}
 		gpio_set_value(panel->reset_config.reset_gpio, 0);
 	}
 }

@@ -7026,6 +7026,7 @@ void sde_encoder_kickoff(struct drm_encoder *drm_enc, bool config_changed)
 		oplus_ofp_lhbm_handle_kick(sde_enc);
 		oplus_ofp_aod_off_backlight_recovery(sde_enc);
 		oplus_ofp_ultra_low_power_aod_update(sde_enc);
+		oplus_ofp_video_mode_aod_handle(sde_enc);
 	}
 #endif /* OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT */
 

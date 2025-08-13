@@ -214,6 +214,7 @@ struct oplus_panel {
 	u32 osc_clk_mode1_rate;
 	bool is_apl_read_support;
 	bool white_point_compensation_enabled;
+	bool aod_backlight_async;
 
 	/* ---------------- apollo variate ---------------- */
 	bool is_switching;
@@ -238,6 +239,7 @@ struct oplus_panel {
 	bool oplus_bl_demura_dbv_support;
 	int bl_demura_mode;
 	bool vid_timming_switch_enabled;
+	bool vid_timming_switch_post_enabled;
 
 	bool need_power_on_backlight;
 	struct oplus_brightness_alpha *dc_ba_seq;
@@ -259,6 +261,7 @@ struct oplus_panel {
 	bool pl_check_enable;
 	bool pl_check_flag;
 	int pl_check_time_gap;
+	bool mipi_reset_enable;
 
 	unsigned int power_on_sequence[7][2];
 	unsigned int power_off_sequence[7][2];
@@ -280,6 +283,10 @@ struct oplus_panel {
 	/* indicates how many frames cost from aod off cmd sent to normal frame,
 	"0" means once aod off cmd sent the next frame will be normal frame */
 	unsigned int aod_off_frame_cost;
+
+	/* add for factory test fps switch, ignore some fps */
+	int ignore_mode_count;
+	u32 *ignore_mode;
 };
 
 #endif /* _OPLUS_PANEL_H_ */

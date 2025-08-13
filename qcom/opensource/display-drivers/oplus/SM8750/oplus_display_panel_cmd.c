@@ -22,6 +22,7 @@
 
 extern u32 bl_lvl;
 extern struct panel_id panel_id;
+extern int panel_id_custom;
 
 const char *cmd_set_prop_map[DSI_CMD_SET_MAX] = {
 	"qcom,mdss-dsi-pre-on-command",
@@ -222,6 +223,7 @@ const char *cmd_set_prop_map[DSI_CMD_SET_MAX] = {
 	"qcom,mdss-dsi-panel-info-switch-page-command",
 	"qcom,mdss-dsi-panel-init-command",
 	"qcom,mdss-dsi-optimize-on-command",
+	"qcom,mdss-dsi-optimize-vice-on-command",
 	"qcom,mdss-dsi-vid-144hz-switch-command",
 	"qcom,mdss-dsi-vid-120hz-switch-command",
 	"qcom,mdss-dsi-vid-90hz-switch-command",
@@ -463,6 +465,7 @@ const char *cmd_set_state_map[DSI_CMD_SET_MAX] = {
 	"qcom,mdss-dsi-panel-info-switch-page-command-state",
 	"qcom,mdss-dsi-panel-init-command-state",
 	"qcom,mdss-dsi-optimize-on-command-state",
+	"qcom,mdss-dsi-optimize-vice-on-command-state",
 	"qcom,mdss-dsi-vid-144hz-switch-command-state",
 	"qcom,mdss-dsi-vid-120hz-switch-command-state",
 	"qcom,mdss-dsi-vid-90hz-switch-command-state",
@@ -675,7 +678,11 @@ int oplus_panel_cmd_switch(struct dsi_panel *panel, enum dsi_cmd_set_type *type)
 
 	oplus_panel_pwm_cmd_replace_handle(panel, type);
 	if (*type == DSI_CMD_SET_ON && oplus_panel_id_compatibility(panel)) {
-		*type = DSI_CMD_SET_COMPATIBILITY_ON;
+		if (1 == panel_id_custom) {
+			*type = DSI_CMD_SET_COMPATIBILITY_VICE_ON;
+		} else {
+			*type = DSI_CMD_SET_COMPATIBILITY_ON;
+		}
 	}
 
 	count = panel->cur_mode->priv_info->cmd_sets[*type].count;

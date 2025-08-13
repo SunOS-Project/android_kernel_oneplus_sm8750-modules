@@ -46,7 +46,9 @@ extern int oplus_display_private_api_init(void);
 extern void oplus_display_private_api_exit(void);
 extern struct panel_id panel_id;
 extern int is_fpga_work_okay(void);
+extern bool oplus_ofp_get_aod_state(void);
 
+bool g_oplus_send_fps_code = false;
 unsigned int oplus_bl_print_window = OPLUS_BACKLIGHT_WINDOW_SIZE;
 extern char oplus_global_hbm_flags;
 extern int dcc_flags;
@@ -177,6 +179,13 @@ void oplus_bridge_pre_enable(struct dsi_display *display, struct dsi_display_mod
 	return;
 }
 
+void oplus_bridge_post_enable(struct dsi_display *display, struct dsi_display_mode *mode)
+{
+	oplus_panel_switch_vid_mode_post(display, mode);
+
+	return;
+}
+
 void oplus_display_enable_pre(struct dsi_display *display)
 {
 	int rc = 0;
@@ -184,6 +193,7 @@ void oplus_display_enable_pre(struct dsi_display *display)
 	display->panel->oplus_panel.power_mode_early = SDE_MODE_DPMS_ON;
 	display->panel->power_mode = SDE_MODE_DPMS_ON;
 	__oplus_read_apl_thread_ctl(true);
+	__oplus_vid_sync_backlight_thread_ctl(true);
 
 	if (display->oplus_display.panel_sn != 0) {
 		OPLUS_DSI_INFO("panel serial_number have read in UEFI, serial_number = [%016lX]\n",
@@ -337,6 +347,8 @@ void oplus_encoder_kickoff(struct drm_encoder *drm_enc, struct sde_encoder_virt 
 		}
 	} else {
 		oplus_sync_panel_brightness_v2(drm_enc);
+
+		__oplus_vid_sync_backlight_thread_ctl(true);
 	}
 	oplus_set_osc_status(drm_enc);
 
@@ -377,6 +389,11 @@ bool oplus_display_check_status_pre(struct dsi_panel *panel)
 		OPLUS_DSI_INFO("Skip the check because panel power mode isn't power on, "
 				"power_mode_early=%d, power_mode=%d\n",
 				panel->oplus_panel.power_mode_early, panel->power_mode);
+		return true;
+	}
+
+	if (!strcmp(panel->name, "AC274 P 3 A0026 dsc video mode panel") && oplus_ofp_get_aod_state()) {
+		OPLUS_DSI_INFO("Skip the check because aod mode\n");
 		return true;
 	}
 
@@ -811,6 +828,18 @@ void oplus_dsi_message_tx_post(struct dsi_ctrl *dsi_ctrl, struct dsi_cmd_desc *c
 int oplus_display_validate_status(struct dsi_display *display)
 {
 	int rc = 0;
+	struct sde_connector *sde_conn;
+
+	if (!display) {
+		OPLUS_DSI_ERR("Invalid display\n");
+		return false;
+	}
+
+	sde_conn = to_sde_connector(display->drm_conn);
+	if (g_oplus_send_fps_code || atomic_read(&sde_conn->oplus_conn.bl_need_update)) {
+		OPLUS_DSI_INFO("Set other dsi cmd, skip esd check!\n");
+		return true;
+	}
 
 	rc = oplus_panel_validate_reg_read(display->panel);
 
@@ -973,6 +1002,33 @@ void oplus_sde_encoder_phys_cmd_wait_for_wr_ptr_pre(struct drm_connector *conn)
 	return;
 }
 
+void oplus_dsi_ctrl_configure_pre(struct dsi_ctrl *dsi_ctrl, u32 *sched_line_no)
+{
+	struct dsi_mode_info *timing = &(dsi_ctrl->host_config.video_timing);
+	struct dsi_display *display = get_main_display();
+	char tag_name[64];
+	u32 refresh_rate = 0;
+
+	if (!display || !display->panel) {
+		OPLUS_DSI_ERR("primary display or primary_display->panel is null\n");
+		return;
+	}
+
+	if (display->panel->cur_mode) {
+		refresh_rate = display->panel->cur_mode->timing.refresh_rate;
+	}
+	if (display->panel->oplus_panel.last_refresh_rate != refresh_rate) {
+		g_oplus_send_fps_code = true;
+	}
+	*sched_line_no = g_oplus_send_fps_code ? 1 : ((*sched_line_no == 0) ? 1 :*sched_line_no);
+	snprintf(tag_name, sizeof(tag_name), "cur_refresh_rate[%d]-*sched_line_no[%d]", timing->refresh_rate, *sched_line_no);
+
+	SDE_ATRACE_BEGIN(tag_name);
+	SDE_ATRACE_END(tag_name);
+	SDE_EVT32(dsi_ctrl->cell_index, SDE_EVTLOG_FUNC_EXIT,
+		*sched_line_no);
+}
+
 void oplus_display_ops_init(struct oplus_display_ops *oplus_display_ops)
 {
 	DRM_INFO("oplus display ops init\n");
@@ -1005,6 +1061,7 @@ void oplus_display_ops_init(struct oplus_display_ops *oplus_display_ops)
 
 	/* power on */
 	oplus_display_ops->bridge_pre_enable = oplus_bridge_pre_enable;
+	oplus_display_ops->bridge_post_enable = oplus_bridge_post_enable;
 	oplus_display_ops->display_enable_pre = oplus_display_enable_pre;
 	oplus_display_ops->display_enable_mid = oplus_display_enable_mid;
 	oplus_display_ops->display_enable_post = oplus_display_enable_post;
@@ -1058,6 +1115,7 @@ void oplus_display_ops_init(struct oplus_display_ops *oplus_display_ops)
 	oplus_display_ops->dsi_message_tx_pre = oplus_dsi_message_tx_pre;
 	oplus_display_ops->dsi_message_tx_post = oplus_dsi_message_tx_post;
 	oplus_display_ops->panel_parse_cmd_sets_sub = oplus_panel_parse_cmd_sets_sub;
+	oplus_display_ops->dsi_ctrl_configure_pre = oplus_dsi_ctrl_configure_pre;
 
 	/* aod */
 	oplus_display_ops->panel_set_lp1 = oplus_panel_set_lp1;

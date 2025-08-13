@@ -25,6 +25,7 @@ struct oplus_connector {
 	bool bl_need_sync;
 	bool osc_need_update;
 	atomic_t bl_apl_need_update;
+	atomic_t bl_need_update;
 };
 
 #endif /* _OPLUS_CONNECTOR_H_ */

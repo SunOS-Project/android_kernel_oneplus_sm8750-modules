@@ -20,6 +20,11 @@
 #include "sde_dbg.h"
 #include "oplus_debug.h"
 
+#if defined(CONFIG_PXLW_IRIS)
+#include "pw_iris_loop_back.h"
+#include "dsi_iris_api.h"
+#endif
+
 #define DSI_PANEL_OPLUS_DUMMY_VENDOR_NAME  "PanelVendorDummy"
 #define DSI_PANEL_OPLUS_DUMMY_MANUFACTURE_NAME  "dummy1024"
 
@@ -1428,6 +1433,13 @@ int oplus_display_tx_cmd_set_lock(struct dsi_display *display, enum dsi_cmd_set_
 
 int oplus_display_panel_get_iris_loopback_status(void *buf)
 {
+#if defined(CONFIG_PXLW_IRIS)
+	uint32_t *status = buf;
+
+	if (iris_is_chip_supported())
+		*status = iris_loop_back_validate();
+#endif
+
 	return 0;
 }
 
@@ -2036,4 +2048,37 @@ int oplus_display_panel_set_white_point_status(void *data)
 	mutex_unlock(&display->display_lock);
 
 	return rc;
+}
+
+int oplus_display_get_ignore_mode(void *data)
+{
+	struct ignore_mode_get *ignore_get = data;
+	int display_id = ignore_get->count;
+	struct dsi_display *display = NULL;
+	struct dsi_panel *panel = NULL;
+	char payload[128] = "";
+	u32 cnt = 0;
+
+	display = get_main_display();
+	if (1 == display_id)
+		display = get_sec_display();
+	if (!display) {
+		OPLUS_DSI_ERR("display is null\n");
+		return 0;
+	}
+
+	panel = display->panel;
+	if (!panel) {
+		OPLUS_DSI_ERR("panel is null\n");
+		return 0;
+	}
+
+	ignore_get->count = panel->oplus_panel.ignore_mode_count;
+	OPLUS_DSI_INFO("ignore_get->count = %d\n", ignore_get->count);
+	for (int i = 0; i < ignore_get->count; i++) {
+		ignore_get->ignore_mode[i] = panel->oplus_panel.ignore_mode[i];
+		cnt += scnprintf(payload + cnt, sizeof(payload) - cnt, "[%u]", ignore_get->ignore_mode[i]);
+	}
+	OPLUS_DSI_INFO("ignore mode = %s\n", payload);
+	return 0;
 }

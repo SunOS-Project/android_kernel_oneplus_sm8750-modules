@@ -19,6 +19,9 @@
 #include "sde_kms.h"
 #include "sde_fence.h"
 #include "sde_encoder.h"
+// #ifdef OPLUS_ARCH_EXTENDS
+#include "sde_trace.h"
+// #endif /*OPLUS_ARCH_EXTENDS*/
 
 #define TIMELINE_VAL_LENGTH		128
 #define SPEC_FENCE_FLAG_FENCE_ARRAY	0x10
@@ -844,6 +847,12 @@ void sde_fence_dump(struct dma_fence *fence)
 		fence->ops->signaled ?
 		fence->ops->signaled(fence) : 0xffffffff,
 		dma_fence_get_status(fence), fence->flags);
+// #ifdef OPLUS_ARCH_EXTENDS
+        if (!strcmp(fence->ops->get_driver_name(fence), "kgsl-timeline") ||
+            !strcmp(fence->ops->get_driver_name(fence), "oplus_sync")) {
+                trace_oplus_kgsl_fence_timeout(fence->ops->get_timeline_name(fence), "kgsl_fence_timeout", 9999);
+        }
+// #endif /*OPLUS_ARCH_EXTENDS*/
 }
 
 static void sde_fence_dump_user_fds_info(struct dma_fence *base_fence)

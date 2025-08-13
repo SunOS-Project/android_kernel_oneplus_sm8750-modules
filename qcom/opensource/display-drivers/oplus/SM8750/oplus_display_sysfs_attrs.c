@@ -42,6 +42,10 @@
 #include "oplus_onscreenfingerprint.h"
 #endif /* OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT */
 
+#if defined(CONFIG_PXLW_IRIS) || defined(CONFIG_PXLW_SOFT_IRIS)
+#include "dsi_iris_api.h"
+#endif
+
 /* String length define */
 #define STR_SIZE 512
 
@@ -205,6 +209,17 @@ int dsi_panel_read_panel_reg(struct dsi_display_ctrl *ctrl,
 	cmdsreq.ctrl_flags = DSI_CTRL_CMD_READ;
 
 	dsi_display_set_cmd_tx_ctrl_flags(display, &cmdsreq);
+#if defined(CONFIG_PXLW_IRIS)
+	if (iris_is_chip_supported() && iris_is_pt_mode(panel->is_secondary)) {
+		struct iris_cmd_set cmdset;
+
+		memset(&cmdset, 0x00, sizeof(cmdset));
+		cmdset.count = 1;
+		cmdset.cmds = (struct iris_cmd_desc *)(&cmdsreq);
+		rc = iris_pt_send_panel_cmd(&cmdset);
+	} else {
+#endif  /* CONFIG_PXLW_IRIS */
+
 	rc = dsi_ctrl_transfer_prepare(ctrl->ctrl, cmdsreq.ctrl_flags);
 	if (rc) {
 		OPLUS_DSI_ERR("prepare for rx cmd transfer failed rc=%d\n", rc);
@@ -217,6 +232,10 @@ int dsi_panel_read_panel_reg(struct dsi_display_ctrl *ctrl,
 	}
 
 	dsi_ctrl_transfer_unprepare(ctrl->ctrl, cmdsreq.ctrl_flags);
+
+#if defined(CONFIG_PXLW_IRIS)
+	}
+#endif  /* CONFIG_PXLW_IRIS */
 
 error:
 	/* release panel_lock */
@@ -261,6 +280,17 @@ int dsi_panel_read_panel_reg_unlock(struct dsi_display_ctrl *ctrl,
 	cmdsreq.ctrl_flags = DSI_CTRL_CMD_READ;
 
 	dsi_display_set_cmd_tx_ctrl_flags(display, &cmdsreq);
+#if defined(CONFIG_PXLW_IRIS)
+	if (iris_is_chip_supported() && iris_is_pt_mode(panel->is_secondary)) {
+		struct iris_cmd_set cmdset;
+
+		memset(&cmdset, 0x00, sizeof(cmdset));
+		cmdset.count = 1;
+		cmdset.cmds = (struct iris_cmd_desc *)(&cmdsreq);
+		rc = iris_pt_send_panel_cmd(&cmdset);
+	} else {
+#endif  /* CONFIG_PXLW_IRIS */
+
 	rc = dsi_ctrl_transfer_prepare(ctrl->ctrl, cmdsreq.ctrl_flags);
 	if (rc) {
 		DSI_ERR("prepare for rx cmd transfer failed rc=%d\n", rc);
@@ -276,6 +306,10 @@ int dsi_panel_read_panel_reg_unlock(struct dsi_display_ctrl *ctrl,
 	}
 
 	dsi_ctrl_transfer_unprepare(ctrl->ctrl, cmdsreq.ctrl_flags);
+
+#if defined(CONFIG_PXLW_IRIS)
+	}
+#endif  /* CONFIG_PXLW_IRIS */
 
 error:
 	return rc;

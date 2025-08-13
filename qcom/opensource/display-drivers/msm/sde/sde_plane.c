@@ -724,7 +724,7 @@ int sde_plane_wait_input_fence(struct drm_plane *plane, uint32_t wait_ms, int *e
 		if (input_fence) {
 #ifdef OPLUS_FEATURE_DISPLAY
 			// hack timeout for debug
-			wait_ms = 3000;
+			wait_ms = 5000;
 #endif
 			prefix = sde_sync_get_name_prefix(input_fence);
 			rc = sde_sync_wait(input_fence, wait_ms, error_status);

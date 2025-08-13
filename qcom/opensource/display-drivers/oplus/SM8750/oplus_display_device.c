@@ -95,8 +95,10 @@ static const struct panel_ioctl_desc panel_ioctls[] = {
 	PANEL_IOCTL_DEF(PANEL_IOCTL_GET_DRE_STATUS, oplus_display_panel_get_dre_status),
 	PANEL_IOCTL_DEF(PANEL_IOCTL_GET_PANEL_BPP, oplus_display_panel_get_panel_bpp),
 	PANEL_IOCTL_DEF(PANEL_IOCTL_GET_PANEL_NAME, oplus_display_panel_get_panel_name),
+#ifdef OPLUS_FEATURE_DISPLAY_ADFR
 	PANEL_IOCTL_DEF(PANEL_IOCTL_SET_DYNAMIC_TE, oplus_adfr_set_test_te),
 	PANEL_IOCTL_DEF(PANEL_IOCTL_GET_DYNAMIC_TE, oplus_adfr_get_test_te),
+#endif
 	PANEL_IOCTL_DEF(PANEL_IOCTL_GET_IRIS_LOOP_STATUS, oplus_display_panel_get_iris_loopback_status),
 	PANEL_IOCTL_DEF(PANEL_IOCTL_SET_FP_TYPE, oplus_ofp_set_fp_type),
 	PANEL_IOCTL_DEF(PANEL_IOCTL_GET_FP_TYPE, oplus_ofp_get_fp_type),
@@ -112,6 +114,7 @@ static const struct panel_ioctl_desc panel_ioctls[] = {
 	PANEL_IOCTL_DEF(PANEL_IOCTL_SET_MIPI_ERR_CHECK, oplus_display_panel_set_mipi_err_check),
 	PANEL_IOCTL_DEF(PANEL_IOCTL_GET_MIPI_ERR_CHECK, oplus_display_panel_get_mipi_err_check),
 	PANEL_IOCTL_DEF(PANEL_IOCTL_SET_WHITE_POINT_FLAG, oplus_display_panel_set_white_point_status),
+	PANEL_IOCTL_DEF(PANEL_IOCTL_GET_IGNORE_MODE, oplus_display_get_ignore_mode),
 };
 
 int oplus_display_fix_apollo_level(void)

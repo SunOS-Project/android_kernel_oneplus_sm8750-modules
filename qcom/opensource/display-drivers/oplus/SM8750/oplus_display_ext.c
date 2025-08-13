@@ -22,6 +22,9 @@
 #define WAIT_FPGA_RESET_TIME 4000
 #define SERIAL_NUMBER_BASE_YEAR 2011
 
+/* Compatible screen initialization */
+int panel_id_custom = 0;
+EXPORT_SYMBOL(panel_id_custom);
 extern int dc_apollo_enable;
 extern int oplus_dimlayer_hbm;
 extern unsigned int oplus_display_log_type;
@@ -31,6 +34,8 @@ bool is_lhbm_panel = false;
 extern int lcd_closebl_flag;
 extern u32 oplus_last_backlight;
 extern bool is_lhbm_panel;
+extern bool g_oplus_send_fps_code;
+
 extern int oplus_display_private_api_init(void);
 extern void  oplus_display_private_api_exit(void);
 extern int is_fpga_work_okay(void);
@@ -86,6 +91,17 @@ bool oplus_panel_id_compatibility(struct dsi_panel *panel)
 
 	if ((is_project(24821) || is_project(24875)) && (get_PCB_Version() < EVT1)) {
 		return true;
+	}
+
+	if (is_project(24067) || is_project(24295)) {
+		if (display->oplus_display.panel_id3 == 0x01) {
+			/* panel C3 & T0 */
+			return true;
+		} else if (display->oplus_display.panel_id3 == 0x02) {
+			/* panel C2 */
+			panel_id_custom = 1;
+			return true;
+		}
 	}
 
 	return false;
@@ -144,6 +160,126 @@ int oplus_set_osc_status(struct drm_encoder *drm_enc) {
 	return rc;
 }
 
+void oplus_panel_switch_vid_mode_post(struct dsi_display *display, struct dsi_display_mode *mode)
+{
+	u32 rc = 0;
+	int refresh_rate = 0;
+	static int cur_refresh_rate = 0;
+	int dsi_cmd_vid_switch = 0;
+	int te_count = 1;
+	u32 current_vblank;
+	struct dsi_panel *panel = NULL;
+	struct drm_crtc *crtc = NULL;
+
+	if (!display && !display->panel) {
+		OPLUS_DSI_INFO("display/panel is null!\n");
+		return;
+	}
+
+	if (!mode) {
+		OPLUS_DSI_INFO("dsi_display_mode is null!\n");
+		return;
+	}
+
+	panel = display->panel;
+	crtc = display->drm_conn->state->crtc;
+
+	if (!panel->oplus_panel.vid_timming_switch_post_enabled) {
+		return;
+	}
+
+	if (panel->power_mode == SDE_MODE_DPMS_OFF || oplus_sync_power_state == SDE_MODE_DPMS_LP1) {
+		OPLUS_DSI_INFO("display panel in off status,power_mode = %d, oplus_sync_power_state =  %d\n", panel->power_mode, oplus_sync_power_state);
+		return;
+	}
+
+	if (!dsi_panel_initialized(panel)) {
+		OPLUS_DSI_ERR("should not set panel hbm if panel is not initialized\n");
+		return;
+	}
+
+	refresh_rate = mode->timing.refresh_rate;
+		OPLUS_DSI_INFO("oplus_panel_switch_vid_mode_post refresh %d\n", refresh_rate);
+
+	if (refresh_rate == 120) {
+		dsi_cmd_vid_switch = DSI_CMD_VID_120_SWITCH;
+	} else if (refresh_rate == 60) {
+		dsi_cmd_vid_switch = DSI_CMD_VID_60_SWITCH;
+	} else if (refresh_rate == 90) {
+		dsi_cmd_vid_switch = DSI_CMD_VID_90_SWITCH;
+	} else if (refresh_rate == 144) {
+		dsi_cmd_vid_switch = DSI_CMD_VID_144_SWITCH;
+	} else {
+		return;
+	}
+	g_oplus_send_fps_code = true;
+
+	if (refresh_rate == 144) {
+		current_vblank = drm_crtc_vblank_count(crtc);
+		current_vblank = current_vblank + te_count;
+		if (cur_refresh_rate == 60) {
+			rc = wait_event_timeout(*drm_crtc_vblank_waitqueue(crtc), current_vblank == drm_crtc_vblank_count(crtc), usecs_to_jiffies(16000 + 100));
+		} else {
+			rc = wait_event_timeout(*drm_crtc_vblank_waitqueue(crtc), current_vblank == drm_crtc_vblank_count(crtc), usecs_to_jiffies(6900 + 100));
+		}
+		if (!rc) {
+			OPLUS_DSI_ERR("[DISP][ERR][%s:%d]144hz crtc wait_event_timeout\n", __func__, __LINE__);
+		}
+	}
+	if (refresh_rate == 120) {
+		current_vblank = drm_crtc_vblank_count(crtc);
+		current_vblank = current_vblank + te_count;
+		if (cur_refresh_rate == 60) {
+			rc = wait_event_timeout(*drm_crtc_vblank_waitqueue(crtc), current_vblank == drm_crtc_vblank_count(crtc), usecs_to_jiffies(16000 + 100));
+		} else {
+			rc = wait_event_timeout(*drm_crtc_vblank_waitqueue(crtc), current_vblank == drm_crtc_vblank_count(crtc), usecs_to_jiffies(8300 + 100));
+		}
+		if (!rc) {
+			OPLUS_DSI_ERR("[DISP][ERR][%s:%d]120hz crtc wait_event_timeout\n", __func__, __LINE__);
+		}
+	}
+	if (refresh_rate == 90) {
+		current_vblank = drm_crtc_vblank_count(crtc);
+		current_vblank = current_vblank + te_count;
+		if (cur_refresh_rate == 60) {
+			rc = wait_event_timeout(*drm_crtc_vblank_waitqueue(crtc), current_vblank == drm_crtc_vblank_count(crtc), usecs_to_jiffies(16000 + 100));
+		} else {
+			rc = wait_event_timeout(*drm_crtc_vblank_waitqueue(crtc), current_vblank == drm_crtc_vblank_count(crtc), usecs_to_jiffies(11000 + 100));
+		}
+		if (!rc) {
+			OPLUS_DSI_ERR("[DISP][ERR][%s:%d]90hz crtc wait_event_timeout\n", __func__, __LINE__);
+		}
+	}
+	if (refresh_rate == 60) {
+		current_vblank = drm_crtc_vblank_count(crtc);
+		current_vblank = current_vblank + te_count;
+		rc = wait_event_timeout(*drm_crtc_vblank_waitqueue(crtc), current_vblank == drm_crtc_vblank_count(crtc), usecs_to_jiffies(16000 + 100));
+		if (!rc) {
+			OPLUS_DSI_ERR("[DISP][ERR][%s:%d]60hz crtc wait_event_timeout\n", __func__, __LINE__);
+		}
+	}
+
+	if (panel->esd_config.status_mode == ESD_MODE_PANEL_ERROR_FLAG) {
+		/*skip esd check when vedio mode switch timming gamma*/
+		atomic_set(&display->panel->oplus_panel.esd_pending, 1);
+	}
+
+	SDE_ATRACE_BEGIN("oplus_panel_switch_vid_mode_post");
+
+	mutex_lock(&panel->panel_lock);
+	rc = dsi_panel_tx_cmd_set(panel, dsi_cmd_vid_switch, false);
+	mutex_unlock(&panel->panel_lock);
+	if (rc) {
+		OPLUS_DSI_INFO("[%s] failed to send DSI_CMD_VID_SWITCH cmds, rc=%d\n",
+			panel->name, rc);
+	}
+
+	cur_refresh_rate = refresh_rate;
+	SDE_ATRACE_END("oplus_panel_switch_vid_mode_post");
+
+	return;
+}
+
 void oplus_panel_switch_vid_mode(struct dsi_display *display, struct dsi_display_mode *mode)
 {
 	int rc = 0;
@@ -162,8 +298,11 @@ void oplus_panel_switch_vid_mode(struct dsi_display *display, struct dsi_display
 	}
 
 	panel = display->panel;
-	if (panel->power_mode == SDE_MODE_DPMS_OFF || oplus_sync_power_state != SDE_MODE_DPMS_ON) {
-		OPLUS_DSI_INFO("display panel in off status,power_mode = %d, oplus_sync_power_state =  %d\n", panel->power_mode, oplus_sync_power_state);
+	if (!panel->oplus_panel.vid_timming_switch_enabled) {
+		return;
+	}
+	if (panel->power_mode == SDE_MODE_DPMS_OFF) {
+		OPLUS_DSI_INFO("display panel in off status,power_mode = %d", panel->power_mode);
 		return;
 	}
 
@@ -172,12 +311,7 @@ void oplus_panel_switch_vid_mode(struct dsi_display *display, struct dsi_display
 		return;
 	}
 
-	if (!panel->oplus_panel.vid_timming_switch_enabled) {
-		return;
-	}
-
 	refresh_rate = mode->timing.refresh_rate;
-		OPLUS_DSI_INFO("oplus_panel_switch_vid_mode refresh %d\n", refresh_rate);
 
 	if (refresh_rate == 120) {
 		dsi_cmd_vid_switch = DSI_CMD_VID_120_SWITCH;

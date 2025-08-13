@@ -362,7 +362,8 @@ u32 oplus_panel_silence_backlight(struct dsi_panel *panel, u32 bl_lvl);
 void oplus_printf_backlight_log(struct dsi_display *display, u32 bl_lvl);
 void oplus_printf_backlight_8868_log(struct dsi_display *display, u32 bl_lvl);
 int oplus_sync_panel_brightness_video(struct drm_encoder *drm_enc);
-
+int oplus_sync_backlight_vid_thread(void *data);
+int __oplus_vid_sync_backlight_thread_ctl(bool enable);
 /**
  * oplus_mult_frac() - oplus display backlight mult brightness
  * @bright: Display config brightness
